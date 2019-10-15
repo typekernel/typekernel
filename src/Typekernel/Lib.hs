@@ -1,4 +1,4 @@
-module Lib
+module Typekernel.Lib
     ( someFunc
     ) where
 
