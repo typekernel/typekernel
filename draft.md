@@ -89,16 +89,16 @@ All structures, except the virtual structures used for type magics, occupy some 
 
 ### Composable memory structure operations
 
-Modifications to a substructure of memory can be described in terms of mutable lens. For simplicity purpose we only consider lenses `type MLens m a b s t=forall f. (Functor f)=>(a->m (f b))->(s->m (f t))`, where "side effects" are allowed in both parts.
+Modifications to a substructure of memory can be described in terms of mutable lens. For simplicity purpose we only consider lenses `type MLens m a s=forall f. (Functor f)=>(a->m (f a))->(s->m (f ()))`, where "side effects" are allowed in both parts.
 
-The most basic lenses are like byte operations, for example, `MLens C4m UInt8 UInt8 Memory Memory`. Composing basic lenses result into complexier lenses and allow complex operations (generation).
+The most basic lenses are like byte operations, for example, `MLens C Memory UInt8`. Composing basic lenses result into complexier lenses and allow complex operations (generation).
 
 ### Type-family based generic type
 
 Generic type is one of most important reasons we decided to build an embedded DSL: implementing basic types can be easy, but implementing a sound generic type can be quite hard. But embedding the DSL allows us to reuse the types.
 One way to handle generic types is to use the "template" approach: generic types only exist "before" compilation and are erased(Java) or specialized(C++ and Rust) as soon as type check finishes. 
 
-Take `Option a` for example: in most cases we want the "maybe" thing to store a tag to distinguish `Some a` and `None`. But not for pointers, where we can use the value "0" to represent `None`.
+Take `Option a` for example: in most cases we want the `Maybe` equivalent thing to store a tag to distinguish `Some a` and `None`. But not for pointers, where we can use the value "0" to represent `None`.
 
 ```haskell
 class Option' a where
@@ -120,9 +120,47 @@ instance Option' (Ptr a) where
 
 The problem is only about when to use the specified generic type.
 
-### Memory policy: RAII
+### Move semantic
+
+All mutable 
+
+### Memory policy: Region-based RAII
 A good idea is to use RAII for resource recycling.
 
-We need to support `alloca` equivalent as stack primitives, allocating space on stack and recycle the space as soon as the block goes out of scope. This allows us CPS style for RAII scoping.
+Resource management is also a problem even in pure FP languages like Haskell, since there is lazy evaluation and IO operations. One common mistake is using resource after closing it.
 
+```haskell
+handleFile = do
+        h<-openFile "/tmp/test.txt" ReadMode
+        hClose h
+        content<-hGetLine h -- Error!
+        print content
+readAll = do
+        h<-openFile "/tmp/test.txt" ReadMode
+        content<-hGetContents h -- but this is a lazy handle
+        hClose h
+        print content -- Error!
+```
 
+One way to solve this problem is to limit resources in a scope.
+However, the resource can still leak out of scope with some trick...
+```haskell
+withFile f = do
+        h<-openFile "/tmp/test.txt" ReadMode -- Open file.
+        ret<-f h
+        hClose h -- After using the handle, close the file to prevent leakage.
+        return ret
+abuseWithFile = do
+        bad_handle=withFile return --Leaked.
+        content<-hGetLine h --Error!
+        print content
+```
+
+To prevent resource from leaking out of scope, we use a rank-two type to prevent certain resources from leaking out, by adding a scope to the type of both resource and scope monad.
+```haskell
+data RegionT s pr α
+runRegionT :: RegionControlIO pr => (forall s. RegionT s pr α) -> pr α
+-- Trying to runRegionT on some α with s in type will cause a type error.
+``` 
+
+After implementing move semantic and region-based RAII, we are given the ability to implement a real RAII: allocating resources in a scope and recycling them all after scope is ended.

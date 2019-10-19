@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies, DataKinds, TemplateHaskell, UndecidableInstances, DeriveFunctor, ScopedTypeVariables, RecursiveDo #-}
+{-# LANGUAGE TypeFamilies, DataKinds, PolyKinds, TemplateHaskell, UndecidableInstances, DeriveFunctor, ScopedTypeVariables, RecursiveDo #-}
 -- C---- AST.
 -- C---- is a chosen subset from C that works as code generation target.
 -- The ideal result should be something that has TAC-style assignments and structured control flow.
@@ -11,7 +11,7 @@ module Typekernel.C4mAST where
     import Data.Monoid
     import Control.Monad.Reader
     import Control.Monad
-
+    import Typekernel.Nat
     type Metadata=String
     $(return $ do
         t<-["Int8", "UInt8", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64", "Boolean"]
@@ -20,9 +20,11 @@ module Typekernel.C4mAST where
     
     data Fn a b=Fn Metadata
     data Ptr a=Ptr Metadata
+    
     data Arr (n::Nat) a=Arr Metadata
 
-    data Nat=Z | S Nat
+    arraySize :: Arr n a->Proxy n
+    arraySize _=Proxy
 
     fnProxy :: (a->m b)->(Proxy a, Proxy b)
     fnProxy _=(Proxy, Proxy)
@@ -194,6 +196,21 @@ module Typekernel.C4mAST where
 
     data C4mFn a b
     --type CPS f a b=(f a->b)->f b
+
+    class Castable a b
+    
+    -- Integer casting
+    $(return $ do
+        let integers=[''Int8, ''UInt8, ''Int16, ''UInt16, ''Int32, ''UInt32, ''Int64, ''UInt64]
+        t1<-integers
+        t2<-integers
+        [classInstance [''Castable, t1, t2]])
+
+    -- Pointer casting back and forth
+    instance Castable UInt64 (Ptr a)
+    instance Castable (Ptr a) UInt64
+    instance Castable (Ptr a) (Ptr b)
+
     class MonadFix m=>C4mAST m where
         imm :: (Literal a l)=>l->m a
         unary :: (Unary op b a)=>Proxy op->b->m a
@@ -201,6 +218,7 @@ module Typekernel.C4mAST where
         defun :: (FirstClass b, FirstClassList a)=>(a->m b)->m (Fn a b)
         invoke :: (FirstClassList a, FirstClass b)=>(Fn a b)->a->m b
         if' :: (FirstClassList a)=>Boolean->m a->m a->m a
+        cast :: (Castable a b, FirstClass a, FirstClass b)=>Proxy b->a->m b
         --Let :: C4mAST b->(C4mAST b->a)->C4mAST a
 
 
@@ -240,26 +258,5 @@ module Typekernel.C4mAST where
     immBool=imm
 
     
-    expr :: (C4mAST m)=>m Int8
-    expr=mdo
-        a<-immInt8 10
-        b<-immInt8 20
-        sum<-(defun $ \(x::Int8, Void)->do
-                    zero<-immInt8 0
-                    one<-immInt8 1
-                    cmp<-binary opCEQ x zero
-                    sup<-binary opSub x one
-                    result<- if' cmp (return (zero, Void)) $ do
-                        v<-(invoke sum (sup, Void))
-                        return $ (v, Void)
-                    let (r, Void)=result
-                    binary opAdd r x)
-        s<-invoke sum (a, Void)
-        binary opAdd a s
-        
-        
-    -- C4mAST Transpiler.
-
-    
-    -- The main monad that you do everything in.
-
+    type USize=UInt64
+    type Size=Int64

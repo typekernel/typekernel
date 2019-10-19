@@ -25,6 +25,8 @@ dependencies:
 - mtl
 - containers
 - lens
+- transformers
+- adjunctions
 library:
   source-dirs: src
 
