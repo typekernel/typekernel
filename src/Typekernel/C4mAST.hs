@@ -229,33 +229,7 @@ module Typekernel.C4mAST where
         --Invoke :: BasicExpr (a->b)->BasicExpr a->BasicExpr b
     --expr=Let $ Binary And (immBool False) (immBool True)
 
-    immInt8 :: (C4mAST m)=>Integer->m Int8
-    immInt8=imm . fromIntegral
-
-    immUInt8 :: (C4mAST m)=>Integer->m UInt8
-    immUInt8=imm . fromIntegral
-
-    immInt16 :: (C4mAST m)=>Integer->m Int16
-    immInt16=imm . fromIntegral
-
-    immUInt16 :: (C4mAST m)=>Integer->m UInt16
-    immUInt16=imm . fromIntegral
-
-    immInt32 :: (C4mAST m)=>Integer->m Int32
-    immInt32=imm . fromIntegral
-
-    immUInt32 :: (C4mAST m)=>Integer->m UInt32
-    immUInt32=imm . fromIntegral
-
-    immInt64 :: (C4mAST m)=>Integer->m Int64
-    immInt64=imm . fromIntegral
-
-    immUInt64 :: (C4mAST m)=>Integer->m UInt64
-    immUInt64=imm . fromIntegral
-
-
-    immBool :: (C4mAST m)=>Bool->m Boolean
-    immBool=imm
+    
 
     
     type USize=UInt64

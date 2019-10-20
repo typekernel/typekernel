@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ScopedTypeVariables, PolyKinds, DataKinds, InstanceSigs, TemplateHaskell, GADTs, TypeFamilies, AllowAmbiguousTypes #-}
 module Typekernel.Transpiler where
     import Control.Monad.State.Lazy
+    import Control.Monad.IO.Class
     import Typekernel.C4mAST
     import Data.Word
     import Data.Proxy
@@ -10,8 +11,8 @@ module Typekernel.Transpiler where
     import Debug.Trace
     data C4m=C4m {_generatedCodes :: [String], _symbolAlloc :: Int, _definedFuncs :: Int, _arrayAlloc :: Int, _indent :: Int} deriving (Show)
     makeLenses ''C4m
-    newtype C4mParser a=C4mParser {toState :: StateT C4m IO a} deriving (Monad, Applicative, Functor, MonadFix)
-
+    newtype C4mParser a=C4mParser {toState :: StateT C4m IO a} deriving (Monad, Applicative, Functor, MonadFix, MonadIO)
+    
     emptyParser :: C4m
     emptyParser=C4m [] 0 0 0 0
     runParser :: C4mParser a->C4m->IO (a, C4m)
@@ -169,3 +170,35 @@ module Typekernel.Transpiler where
 
     
    
+
+    immInt8 :: Integer->C Int8
+    immInt8=imm . fromIntegral
+
+    immUInt8 :: Integer->C UInt8
+    immUInt8=imm . fromIntegral
+
+    immInt16 :: Integer->C Int16
+    immInt16=imm . fromIntegral
+
+    immUInt16 :: Integer->C UInt16
+    immUInt16=imm . fromIntegral
+
+    immInt32 :: Integer->C Int32
+    immInt32=imm . fromIntegral
+
+    immUInt32 :: Integer->C UInt32
+    immUInt32=imm . fromIntegral
+
+    immInt64 :: Integer->C Int64
+    immInt64=imm . fromIntegral
+
+    immUInt64 :: Integer->C UInt64
+    immUInt64=imm . fromIntegral
+
+
+    immBool :: Bool->C Boolean
+    immBool=imm
+
+    class (Monad m)=>MonadC m where
+        liftC :: C a->m a
+    instance MonadC C4mParser where liftC = id
