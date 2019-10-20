@@ -18,10 +18,10 @@ module Typekernel.C4mAST where
         let name=mkName t
         return $ DataD [] name [] Nothing [NormalC name [(Bang NoSourceUnpackedness NoSourceStrictness,ConT ''Metadata)]] [DerivClause Nothing [ConT ''Show]])
     
-    data Fn a b=Fn Metadata
-    data Ptr a=Ptr Metadata
+    data Fn a b=Fn Metadata deriving Show
+    data Ptr a=Ptr Metadata deriving Show
     
-    data Arr (n::Nat) a=Arr Metadata
+    data Arr (n::Nat) a=Arr Metadata deriving Show
 
     arraySize :: Arr n a->Proxy n
     arraySize _=Proxy
@@ -211,6 +211,7 @@ module Typekernel.C4mAST where
     instance Castable (Ptr a) UInt64
     instance Castable (Ptr a) (Ptr b)
 
+    data Memory (n::Nat)=Memory {memStart :: Ptr USize} deriving Show
     class MonadFix m=>C4mAST m where
         imm :: (Literal a l)=>l->m a
         unary :: (Unary op b a)=>Proxy op->b->m a
@@ -219,6 +220,10 @@ module Typekernel.C4mAST where
         invoke :: (FirstClassList a, FirstClass b)=>(Fn a b)->a->m b
         if' :: (FirstClassList a)=>Boolean->m a->m a->m a
         cast :: (Castable a b, FirstClass a, FirstClass b)=>Proxy b->a->m b
+        defarr :: (KnownNat n)=>Proxy n->m (Memory n)
+        assign :: (KnownNat n)=>Memory n->Memory n->m ()
+        deref :: (FirstClass a)=>Ptr a->m a
+        mref :: (FirstClass a)=>Ptr a->a->m ()
         --Let :: C4mAST b->(C4mAST b->a)->C4mAST a
 
 

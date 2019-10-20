@@ -80,9 +80,14 @@ module Typekernel.RAII where
 
     class Resource a where
         ondrop :: a->C ()
-    --instance (Resource a)=>Move (Scoped a) where
-        --dup handle=do
-            --return dup $ 
+        onmove :: a->C a
+        -- By default: do nothing when dropped.
+        ondrop=const $ return ()
+        
+    instance (Resource a)=>Move (Scoped a) where
+        dup handle=do
+            fin<-dup $ resFinalizer handle
+            return $ handle{resFinalizer=fin}
     scope :: (Resource a, MonadC m)=>a->RAII s m (Scoped a (RAII s m))
     scope a = do
         handle<-onExit $ ondrop a

@@ -68,6 +68,24 @@ While generating from C4m AST to C, we use the code style that resembles TAC cod
 - Functions are organized as functions.
 - AST generates into TAC code. Each unary operation, binary operation, and function call generates a temporary variable.
 
+### C4mAST versus C4mParser
+
+C4mAST includes operations and types that are supported by C4m. It behaves like a "current" C4m spec.
+
+C4mParser includes what is supported in our code generator to C.
+For example, emitting C statements are allowed here, but not in a general C4mAST, since C4mAST does not necessarily compile to C.
+
+Generally, features should be added to C4mAST, but when we try to solve problems with dirty hacks we prefer using C directly.
+One way to solve this conflict is to implement our compiler as a subset of C compiler, which will be costly.
+
+### Optimization strategy
+
+Although in the short term we are not going to throw GCC away and develop a C4m compiler on our own, C4m tries to be friendly to compiler as possible. We purpose several necessary optimizations required when compiling C4m.
+
+- Constant folding. Most variables are assigned only once in C4m, so constant folding should be easy and important.
+- Copy elision. C4m uses memory block (array in C) as first-class members, so hard copy elisions are required.
+- Pointer analysis. Thanks to constant folding most local pointer operations have constant offsets. This allows us to do more aggressive optimizations.
+- Tail-recursion optimization. C4m uses recursions a lot, most of which should be easily written in tail recursion form, thus into loops.
 
 Memory structures
 --------

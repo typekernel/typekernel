@@ -12,7 +12,7 @@ expr :: C ()
 expr=defMain $ mdo
         a<-immInt32 10
         b<-immInt32 20
-        arr<-mkArray (Proxy :: Proxy Int32) (Proxy :: Proxy N100)
+        arr<-defarr (Proxy :: Proxy N100)
         fsum<-(defun $ \(x::Int32, Void)->do
             zero<-immInt32 0
             one<-immInt32 1

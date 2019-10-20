@@ -6,8 +6,6 @@ module Typekernel.Memory where
     import Typekernel.Transpiler
     import Data.Proxy
     import Typekernel.MLens
-    import Typekernel.Array
-    data Memory (n::Nat)=Memory {memStart :: Ptr USize}
 
     roundUp :: (KnownNat n)=>Proxy n->Int
     roundUp n=(((natToInt n)+7) `quot` 8)*8
@@ -17,14 +15,18 @@ module Typekernel.Memory where
     byte pm=
         let getter s=do
                 let ptr=memStart s
-                byteptr<-unsafeCastPointer (Proxy :: Proxy UInt8) ptr
-                index<-immInt64 $ fromIntegral (natToInt pm)
-                readArray byteptr index
+                byteptr<-cast (Proxy :: Proxy USize) ptr
+                offset<-immUSize $ fromIntegral (natToInt pm)
+                newptr<-binary opAdd byteptr offset
+                pp<-(cast (Proxy::Proxy (Ptr UInt8)) newptr)
+                deref pp
             setter s a=do
                 let ptr=memStart s
-                byteptr<-unsafeCastPointer (Proxy :: Proxy UInt8) ptr
-                index<-immInt64 $ fromIntegral (natToInt pm)
-                writeArray byteptr index a
+                byteptr<-cast (Proxy :: Proxy USize) ptr
+                offset<-immUSize $ fromIntegral (natToInt pm)
+                newptr<-binary opAdd byteptr offset
+                pp<-(cast (Proxy::Proxy (Ptr UInt8)) newptr)
+                mref pp a
         in mkMLens getter setter
     
     bit :: (KnownNat n, PeanoLT n N8 True)=>Proxy n->CLens C UInt8 Boolean

@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ScopedTypeVariables, PolyKinds, DataKinds, InstanceSigs, TemplateHaskell, GADTs, TypeFamilies, AllowAmbiguousTypes #-}
+{-# LANGUAGE RebindableSyntax #-}
 module Typekernel.Transpiler where
     import Control.Monad.State.Lazy
     import Control.Monad.IO.Class
@@ -7,27 +8,42 @@ module Typekernel.Transpiler where
     import Data.Proxy
     import Control.Lens
     import Data.List
-    import qualified Data.Map.Lazy as Map
+    import Typekernel.Nat
+    import qualified Data.Set as Set
     import Debug.Trace
-    data C4m=C4m {_generatedCodes :: [String], _symbolAlloc :: Int, _definedFuncs :: Int, _arrayAlloc :: Int, _indent :: Int} deriving (Show)
+    import Prelude
+    import Typekernel.Array
+    data C4m=C4m {_generatedCodes :: [String], _symbolAlloc :: Int, _definedFuncs :: Int, _arrayAlloc :: Int, _indent :: Int, _declaredArrTypes :: Set.Set Int} deriving (Show)
     makeLenses ''C4m
     newtype C4mParser a=C4mParser {toState :: StateT C4m IO a} deriving (Monad, Applicative, Functor, MonadFix, MonadIO)
     
     emptyParser :: C4m
-    emptyParser=C4m [] 0 0 0 0
+    emptyParser=C4m [] 0 0 0 0 Set.empty
     runParser :: C4mParser a->C4m->IO (a, C4m)
     runParser=runStateT . toState
 
     compile :: C4mParser a->IO String
     compile ast=do
-            let new_ast=do
-                    emit "#include <stdint.h>"
-                    emit "#include <stdbool.h>"
-                    ast
-            (_, parser)<-runParser new_ast emptyParser
-            return $ intercalate "\n" $ reverse $ _generatedCodes parser
+            --let new_ast=do
+            --        emit "#include <stdint.h>"
+            --        emit "#include <stdbool.h>"
+            --        ast
+            (_, parser)<-runParser ast emptyParser
+            let all_codes = do
+                    ["#include <stdint.h>"]
+                    ["#include <stdbool.h>"]
+                    generateArrTypes parser
+                    (reverse $ _generatedCodes parser)
+                    where (>>)=(++)
+            return $ intercalate "\n" $ all_codes
     defMain :: C4mParser b->C4mParser ()
     defMain m = (namedFunction "main" $  (const (m >> (immInt32 0)) :: Void->C4mParser Int32)) >> return ()
+    
+    assureArrType :: Int->C4mParser ()
+    assureArrType n=C4mParser $ zoom declaredArrTypes (modify (Set.insert n)) >> return ()
+
+    generateArrTypes :: C4m->[String]
+    generateArrTypes p=map (\x->"typedef struct {uint64_t data["++(show x)++"];} arr_"++(show x)++";") $ Set.toList (_declaredArrTypes p)
     newIdent :: C4mParser String
     newIdent = C4mParser $ do
         val<-zoom symbolAlloc $ do
@@ -165,6 +181,34 @@ module Typekernel.Transpiler where
             id<-newIdent
             emit $ ctype proxyb ++" "++id++" = ("++ ctype proxyb ++")"++val++";"
             return $ wrap proxyb id
+        defarr :: (KnownNat n)=>Proxy n->C4mParser (Memory n)
+        defarr pn=do
+            let arrSize=((7+natToInt pn ) `quot` 8)
+            assureArrType arrSize
+            id<-newArray
+            emit $ "arr_"++(show arrSize)++" "++id++" = {0};"
+            idp<-newIdent
+            emit $ "uint64_t* "++idp++" = &("++id++".data[0]);"
+            return $ Memory (Ptr idp)
+
+        assign :: (KnownNat n)=>Memory n->Memory n->C4mParser ()
+        assign to from=do
+            let pn=proxyMVal to
+            let arrSize=((7+natToInt pn ) `quot` 8)
+            assureArrType arrSize
+            let arrtype="arr_"++(show arrSize)
+            emit $ "*("++arrtype++"*)"++(metadata $ memStart to)++" = *("++arrtype++"*)"++(metadata $ memStart from)++";"
+        --readarr :: (Memory n)->Size->m USize
+        --writearr :: (Memory n)->Size->USize->m USize
+        deref :: (FirstClass a)=>Ptr a->C4mParser a
+        deref p=do
+            let pa=ptrType p
+            id<-newIdent
+            emit $ (ctype pa)++" "++id++" = *"++(metadata p)++";"
+            return $ wrap pa id
+        mref :: (FirstClass a)=>Ptr a->a->C4mParser ()
+        mref p a=
+            emit $ "*"++(metadata p)++" = "++"*"++(metadata a)++";"
     -- Using transpiler by default.
     type C=C4mParser
 
@@ -199,6 +243,13 @@ module Typekernel.Transpiler where
     immBool :: Bool->C Boolean
     immBool=imm
 
+    immSize :: Integer->C Size
+    immSize = imm. fromIntegral
+    immUSize :: Integer->C USize
+    immUSize = imm. fromIntegral
+    
+    -- Monads that are compatible with "C" monad.
     class (Monad m)=>MonadC m where
         liftC :: C a->m a
     instance MonadC C4mParser where liftC = id
+
