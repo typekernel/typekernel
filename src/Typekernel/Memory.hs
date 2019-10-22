@@ -10,9 +10,34 @@ module Typekernel.Memory where
     roundUp :: (KnownNat n)=>Proxy n->Int
     roundUp n=(((natToInt n)+7) `quot` 8)*8
     
+    unzipProxy :: Proxy (a,b)->(Proxy a, Proxy b)
+    unzipProxy _ =(Proxy, Proxy)
 
-    byte :: (KnownNat m, KnownNat n, PeanoLT m n True)=>Proxy m->MLens C (Memory n) UInt8
-    byte pm=
+    mult8 :: Proxy b-> Proxy (NMul N8 b)
+    mult8 _ =Proxy
+    -- We force structure to generate aligned memory reference.
+    -- Reference to unaligned memory is unallowed.
+    submemory :: (KnownNat o, PeanoLT (NMul o N8) n True, PeanoLT (NAdd (NMul o N8) m) (S n) True)=>(Proxy o, Proxy m)->Memory n->C (Memory m)
+    submemory p mem=do
+        let ptr=memStart mem
+        let (po, pm)=p
+        byteptr<-cast (Proxy :: Proxy USize) ptr
+        offset<-immUSize $ fromIntegral $ (natToInt po)*8
+        newptr<-binary opAdd byteptr offset
+        Memory <$> cast (Proxy::Proxy (Ptr USize)) newptr
+    unsafeByte :: (KnownNat m)=>Proxy (m::Nat)->MLens C (Memory n) UInt8
+    unsafeHalf :: (KnownNat m, PeanoMod2 m Z)=>Proxy (m::Nat)->MLens C (Memory n) UInt16
+    unsafeWord :: (KnownNat m, PeanoMod4 m Z)=>Proxy (m::Nat)->MLens C (Memory n) UInt32
+    unsafeDword :: (KnownNat m, PeanoMod8 m Z)=>Proxy (m::Nat)->MLens C (Memory n) UInt64
+    byte :: (KnownNat m, PeanoLT m n True)=>Proxy (m::Nat)->MLens C (Memory n) UInt8
+    half :: (KnownNat m, PeanoLT (S m) n True, PeanoMod2 m Z)=>Proxy (m::Nat)->MLens C (Memory n) UInt16
+    word :: (KnownNat m, PeanoLT  (S (S (S m))) n True, PeanoMod4 m Z)=>Proxy (m::Nat)->MLens C (Memory n) UInt32
+    dword :: (KnownNat m, PeanoLT (S (S (S (S (S (S (S m))))))) n True, PeanoMod8 m Z)=>Proxy (m::Nat)->MLens C (Memory n) UInt64
+    byte=unsafeByte
+    half=unsafeHalf
+    word=unsafeWord
+    dword=unsafeDword
+    unsafeByte pm=
         let getter s=do
                 let ptr=memStart s
                 byteptr<-cast (Proxy :: Proxy USize) ptr
@@ -28,7 +53,58 @@ module Typekernel.Memory where
                 pp<-(cast (Proxy::Proxy (Ptr UInt8)) newptr)
                 mref pp a
         in mkMLens getter setter
+        
     
+    unsafeHalf pm =
+        let getter s=do
+                let ptr=memStart s
+                byteptr<-cast (Proxy :: Proxy USize) ptr
+                offset<-immUSize $ fromIntegral (natToInt pm)
+                newptr<-binary opAdd byteptr offset
+                pp<-(cast (Proxy::Proxy (Ptr UInt16)) newptr)
+                deref pp
+            setter s a=do
+                let ptr=memStart s
+                byteptr<-cast (Proxy :: Proxy USize) ptr
+                offset<-immUSize $ fromIntegral (natToInt pm)
+                newptr<-binary opAdd byteptr offset
+                pp<-(cast (Proxy::Proxy (Ptr UInt16)) newptr)
+                mref pp a
+            in mkMLens getter setter
+    
+    unsafeWord pm =
+        let getter s=do
+                let ptr=memStart s
+                byteptr<-cast (Proxy :: Proxy USize) ptr
+                offset<-immUSize $ fromIntegral (natToInt pm)
+                newptr<-binary opAdd byteptr offset
+                pp<-(cast (Proxy::Proxy (Ptr UInt32)) newptr)
+                deref pp
+            setter s a=do
+                let ptr=memStart s
+                byteptr<-cast (Proxy :: Proxy USize) ptr
+                offset<-immUSize $ fromIntegral (natToInt pm)
+                newptr<-binary opAdd byteptr offset
+                pp<-(cast (Proxy::Proxy (Ptr UInt32)) newptr)
+                mref pp a
+            in mkMLens getter setter
+    
+    unsafeDword pm =
+        let getter s=do
+                let ptr=memStart s
+                byteptr<-cast (Proxy :: Proxy USize) ptr
+                offset<-immUSize $ fromIntegral (natToInt pm)
+                newptr<-binary opAdd byteptr offset
+                pp<-(cast (Proxy::Proxy (Ptr UInt64)) newptr)
+                deref pp
+            setter s a=do
+                let ptr=memStart s
+                byteptr<-cast (Proxy :: Proxy USize) ptr
+                offset<-immUSize $ fromIntegral (natToInt pm)
+                newptr<-binary opAdd byteptr offset
+                pp<-(cast (Proxy::Proxy (Ptr UInt64)) newptr)
+                mref pp a
+            in mkMLens getter setter
     bit :: (KnownNat n, PeanoLT n N8 True)=>Proxy n->CLens C UInt8 Boolean
     bit pn = mkCLens getter setter where
                 tup tt=(tt, Void)

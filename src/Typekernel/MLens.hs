@@ -4,6 +4,9 @@ module Typekernel.MLens where
     import Data.Functor.Identity
     import Control.Monad.Representable.Reader
     import qualified Data.Traversable as T
+    -- Mutable lens: Takes out substructure in a given monad.
+    -- For example: RLens IO (IORef (IORef Int)) (IORef Int) creates a new (IORef Int) to work on.
+    -- Modifying the new IORef does not influence the original object.
     type MLens m s a=forall f. (Traversable f)=>(a->m (f a))->(s-> m (f ()))
     
     mkMLens :: (Monad m)=>(s->m a)->(s->a->m ())->MLens m s a
@@ -33,6 +36,7 @@ module Typekernel.MLens where
         mget l s
     
     -- CoW Lens. Create a duplicate of element on every modification.
+    -- For example: CLens IO (IORef Int) Int creates a new IORef when necessary.
     type CLens m s a=forall f. (Traversable f)=>(a->m (f a))->(s-> m (f s))
 
     mkCLens :: (Monad m)=>(s->m a)->(s->a->m s)->CLens m s a
@@ -61,6 +65,11 @@ module Typekernel.MLens where
         s<-ask
         cget l s
 
+    -- Ref Lens. Modification to substructure will automatically reveal on whole structure.
+    -- For example: RLens IO (IORef (IORef Int)) (IORef Int) is natural, and modifying the gotten IORef influences the original state.
+    --type RLens m s a=forall f. (Traversable f)=>(a->m (f ()))->(s-> m (f ()))
+
+   
     -- Lens composation
     -- Composation of MLens
     (|>) :: (Monad m)=>MLens m s a->MLens m a b->MLens m s b

@@ -147,6 +147,16 @@ module Typekernel.Transpiler where
         defun fn = do
             funname<-newFunc
             namedFunction funname fn
+        invokep :: (FirstClassList a, FirstClass b)=>(Ptr (Fn a b))->a->C4mParser b
+        invokep fn args=do
+            let (aproxy, bproxy)=fnPtrProxyVal fn
+            let rettype=ctype bproxy
+            let (Ptr fnname)=fn
+            k<-newIdent
+            let arglist=listmetadata args
+            let argstr=intercalate ", " arglist
+            emit $ rettype++" "++k++" = (*"++fnname++")("++argstr++");"
+            return $ wrap bproxy k
         invoke :: (FirstClassList a, FirstClass b)=>(Fn a b)->a->C4mParser b
         invoke fn args=do
             let (aproxy, bproxy)=fnProxyVal fn

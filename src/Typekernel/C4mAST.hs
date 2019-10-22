@@ -30,6 +30,8 @@ module Typekernel.C4mAST where
     fnProxy _=(Proxy, Proxy)
     fnProxyVal :: (Fn a b)->(Proxy a, Proxy b)
     fnProxyVal _=(Proxy, Proxy)
+    fnPtrProxyVal :: (Ptr (Fn a b))->(Proxy a, Proxy b)
+    fnPtrProxyVal _=(Proxy, Proxy)
     class Literal t l | t->l where
         rawtype :: Proxy (t, l)->String
         rawvalue :: Proxy (t, l)->l->String
@@ -218,6 +220,8 @@ module Typekernel.C4mAST where
         binary :: (Binary op t1 t2 a)=>Proxy op->t1->t2->m a 
         defun :: (FirstClass b, FirstClassList a)=>(a->m b)->m (Fn a b)
         invoke :: (FirstClassList a, FirstClass b)=>(Fn a b)->a->m b
+        -- We don't support taking function pointer out. However, invoking pointers is necessary.
+        invokep :: (FirstClassList a, FirstClass b)=>(Ptr (Fn a b))->a->m b
         if' :: (FirstClassList a)=>Boolean->m a->m a->m a
         cast :: (Castable a b, FirstClass a, FirstClass b)=>Proxy b->a->m b
         defarr :: (KnownNat n)=>Proxy n->m (Memory n)

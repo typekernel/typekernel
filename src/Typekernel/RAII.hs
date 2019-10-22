@@ -66,7 +66,8 @@ module Typekernel.RAII where
     
     class Move h where
         dup :: MonadC m=> h (RAII cs (RAII ps m))->RAII cs (RAII ps m) (h (RAII ps m))
-
+        forget :: MonadC m => h (RAII cs (RAII ps m))->RAII cs (RAII ps m) ()
+        forget x = dup x >> return ()
     instance Move FinalizerHandle where
         dup handle=do
             let increment ioRef = atomicModifyIORef ioRef $ \refCnt ->
@@ -78,9 +79,10 @@ module Typekernel.RAII where
     
     data Scoped a (r :: * -> * )=Scoped {scopedValue :: a, resFinalizer :: FinalizerHandle r}
 
+    
     class Resource a where
         ondrop :: a->C ()
-        onmove :: a->C a
+        --onmove :: a->C a
         -- By default: do nothing when dropped.
         ondrop=const $ return ()
         

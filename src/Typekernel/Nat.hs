@@ -1,5 +1,6 @@
 {-# LANGUAGE TemplateHaskell, DataKinds, PolyKinds, ScopedTypeVariables #-}
 {-# LANGUAGE FunctionalDependencies, FlexibleInstances, UndecidableInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 module Typekernel.Nat where
     import Typekernel.TH
     import Data.Proxy
@@ -37,3 +38,52 @@ module Typekernel.Nat where
     instance PeanoAbsDiff Z (S b) (S b)
     instance PeanoAbsDiff (S a) Z (S a)
     instance (PeanoAbsDiff a b c)=>PeanoAbsDiff (S a) (S b) c
+
+    class PeanoAdd a b t | a b->t
+    instance PeanoAdd Z b b
+    instance (PeanoAdd a b t)=>(PeanoAdd (S a) b (S t))
+
+
+    -- Shorcuts for memory size calculation.
+
+    class PeanoUpRound8 a t | a->t
+    instance PeanoUpRound8 Z N0
+    instance PeanoUpRound8 N1 N1
+    instance PeanoUpRound8 N2 N1
+    instance PeanoUpRound8 N3 N1
+    instance PeanoUpRound8 N4 N1
+    instance PeanoUpRound8 N5 N1
+    instance PeanoUpRound8 N6 N1
+    instance PeanoUpRound8 N7 N1
+    instance (PeanoUpRound8 a t)=>PeanoUpRound8 (S(S(S(S(S(S(S(S a)))))))) (S t)
+
+    class PeanoMod8 a t | a->t
+    instance PeanoMod8 Z N0
+    instance PeanoMod8 N1 N1
+    instance PeanoMod8 N2 N2
+    instance PeanoMod8 N3 N3
+    instance PeanoMod8 N4 N4
+    instance PeanoMod8 N5 N5
+    instance PeanoMod8 N6 N6
+    instance PeanoMod8 N7 N7
+    instance (PeanoMod8 a t)=>PeanoMod8 (S(S(S(S(S(S(S(S a)))))))) t
+
+    class PeanoMod4 a t | a->t
+    instance PeanoMod4 Z N0
+    instance PeanoMod4 N1 N1
+    instance PeanoMod4 N2 N2
+    instance PeanoMod4 N3 N3
+    instance (PeanoMod4 a t)=>PeanoMod4 (S(S(S(S a)))) t
+
+    class PeanoMod2 a t | a->t
+    instance PeanoMod2 Z N0
+    instance PeanoMod2 N1 N1
+    instance (PeanoMod2 a t)=>PeanoMod2 (S(S a)) t
+
+    type family NAdd (a::Nat) (b::Nat) :: Nat where
+        NAdd Z b=b
+        NAdd (S a) b=S (NAdd a b)
+
+    type family NMul (a::Nat) (b::Nat) :: Nat where
+        NMul a Z=Z
+        NMul a (S b)=NAdd (NMul a b) a
