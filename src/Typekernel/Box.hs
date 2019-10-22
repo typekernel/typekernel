@@ -1,5 +1,5 @@
 {-# LANGUAGE DataKinds, FlexibleInstances, FunctionalDependencies, UndecidableInstances #-}
-module Typerkernel.Box where
+module Typekernel.Box where
     import Typekernel.C4mAST
     import Typekernel.Transpiler
     import Typekernel.Structure

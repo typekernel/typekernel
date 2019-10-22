@@ -7,7 +7,8 @@ import Typekernel.Array
 import Data.Proxy
 import Typekernel.Memory
 import Typekernel.Nat
-
+import qualified Typekernel.Loader.Main
+import System.IO
 expr :: C ()
 expr=defMain $ mdo
         a<-immInt32 10
@@ -27,5 +28,15 @@ expr=defMain $ mdo
         ret<-binary opAdd a s
 
         emit $ "printf(\"The sum is %d\\n\"," ++ (metadata ret) ++ ");"
+generateCode :: String->C ()->IO ()
+generateCode name ast=do
+    putStrLn $ "Generating "++name++".c"
+    code<-compile ast
+    writeFile (name++".c") code
+    return ()
 main :: IO ()
-main = compile expr >>= putStrLn
+main = do
+    putStrLn "********************************\nTypekernel Code Generator\n********************************"
+    generateCode "expr" expr
+    generateCode "bootloader" Typekernel.Loader.Main.main
+    putStrLn "********************************\nTypekernel Code Generator Done.\n********************************"
