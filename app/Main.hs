@@ -7,10 +7,21 @@ import Typekernel.Array
 import Data.Proxy
 import Typekernel.Memory
 import Typekernel.Nat
+import Typekernel.Std.Basic
+import Typekernel.RAII
+import Typekernel.Structure
+import Typekernel.MLens
 import qualified Typekernel.Loader.Main
 import System.IO
 expr :: C ()
 expr=defMain $ mdo
+        emit "// RAII Start"
+        runRAII $ do
+            mem<-construct $ zeroBasic (Proxy :: Proxy UInt32) 
+            a<-liftC $ immUInt32 114514
+            liftC $ mset (basic (Proxy :: Proxy UInt32)) (scopedValue mem) a
+            return ()
+        emit "// RAII End"
         a<-immInt32 10
         b<-immInt32 20
         arr<-defarr (Proxy :: Proxy N100)

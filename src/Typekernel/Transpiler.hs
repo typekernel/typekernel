@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, ScopedTypeVariables, PolyKinds, DataKinds, InstanceSigs, TemplateHaskell, GADTs, TypeFamilies, AllowAmbiguousTypes #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, ScopedTypeVariables, PolyKinds, DataKinds, InstanceSigs, TemplateHaskell, GADTs, TypeFamilies, AllowAmbiguousTypes, FlexibleInstances, UndecidableInstances #-}
 {-# LANGUAGE RebindableSyntax #-}
 module Typekernel.Transpiler where
     import Control.Monad.State.Lazy
@@ -218,7 +218,7 @@ module Typekernel.Transpiler where
             return $ wrap pa id
         mref :: (FirstClass a)=>Ptr a->a->C4mParser ()
         mref p a=
-            emit $ "*"++(metadata p)++" = "++"*"++(metadata a)++";"
+            emit $ "*"++(metadata p)++" = "++""++(metadata a)++";"
     -- Using transpiler by default.
     type C=C4mParser
 
@@ -262,4 +262,3 @@ module Typekernel.Transpiler where
     class (Monad m)=>MonadC m where
         liftC :: C a->m a
     instance MonadC C4mParser where liftC = id
-

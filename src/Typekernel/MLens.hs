@@ -4,6 +4,7 @@ module Typekernel.MLens where
     import Data.Functor.Identity
     import Control.Monad.Representable.Reader
     import qualified Data.Traversable as T
+    import Data.Proxy
     -- Mutable lens: Takes out substructure in a given monad.
     -- For example: RLens IO (IORef (IORef Int)) (IORef Int) creates a new (IORef Int) to work on.
     -- Modifying the new IORef does not influence the original object.
@@ -96,3 +97,10 @@ module Typekernel.MLens where
     
     -- Composation of MLens after CLens is a bad idea!
     -- No lens used in code generation should allow this to happen.
+
+    lensM :: (lens m s a)->Proxy m
+    lensM _=Proxy
+    lensS :: (lens m s a)->Proxy s
+    lensS _=Proxy
+    lensA :: (lens m s a)->Proxy a
+    lensA _=Proxy
