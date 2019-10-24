@@ -1,7 +1,11 @@
 module Typekernel.Loader.Main where
     import Typekernel.Loader.UEFI
     import Typekernel.Transpiler
-    app uefi=do
-        return ()
+    import Typekernel.Std.StringLiteral
+    import Typekernel.Std.Log
+    app :: UEFI ()
+    app =do
+        lit<-liftC $ stringL "Warm welcome from Typekernel Typeboot!\n"
+        putLog lit
     main :: C ()
-    main=return ()
+    main=uefiMain app

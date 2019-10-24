@@ -87,3 +87,14 @@ module Typekernel.Nat where
     type family NMul (a::Nat) (b::Nat) :: Nat where
         NMul a Z=Z
         NMul a (S b)=NAdd (NMul a b) a
+    type family NUpRound8 (a::Nat) :: Nat where
+        NUpRound8 Z=N8
+        NUpRound8 N1=N8
+        NUpRound8 N2=N8
+        NUpRound8 N3=N8
+        NUpRound8 N4=N8
+        NUpRound8 N5=N8
+        NUpRound8 N6=N8
+        NUpRound8 N7=N8
+        NUpRound8 N8=N8
+        NUpRound8 (S(S(S(S(S(S(S(S a)))))))) = NUpRound8 (S a)

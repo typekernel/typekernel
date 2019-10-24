@@ -1,4 +1,4 @@
-{-# LANGUAGE DataKinds, FlexibleInstances, FunctionalDependencies, UndecidableInstances #-}
+{-# LANGUAGE DataKinds, FlexibleInstances, FunctionalDependencies, UndecidableInstances, TypeFamilies #-}
 module Typekernel.Std.Box where
     import Typekernel.C4mAST
     import Typekernel.Transpiler
@@ -9,6 +9,7 @@ module Typekernel.Std.Box where
     import Typekernel.MLens
     import Control.Monad.Trans.Class
     data Box a =Box {boxPointer :: Memory N8}
+    type instance SizeOf (Box a)=N8
     boxType :: Box a->Proxy a
     boxType _ =Proxy
     instance (Structure n a)=>Structure N8 (Box a) where

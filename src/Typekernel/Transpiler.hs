@@ -13,12 +13,12 @@ module Typekernel.Transpiler where
     import Debug.Trace
     import Prelude
     import Typekernel.Array
-    data C4m=C4m {_generatedCodes :: [String], _symbolAlloc :: Int, _definedFuncs :: Int, _arrayAlloc :: Int, _indent :: Int, _declaredArrTypes :: Set.Set Int} deriving (Show)
+    data C4m=C4m {_generatedCodes :: [String], _symbolAlloc :: Int, _definedFuncs :: Int, _arrayAlloc :: Int, _indent :: Int, _declaredArrTypes :: Set.Set Int, _newDecls :: [String]} deriving (Show)
     makeLenses ''C4m
     newtype C4mParser a=C4mParser {toState :: StateT C4m IO a} deriving (Monad, Applicative, Functor, MonadFix, MonadIO)
     
     emptyParser :: C4m
-    emptyParser=C4m [] 0 0 0 0 Set.empty
+    emptyParser=C4m [] 0 0 0 0 Set.empty []
     runParser :: C4mParser a->C4m->IO (a, C4m)
     runParser=runStateT . toState
 
@@ -33,6 +33,7 @@ module Typekernel.Transpiler where
                     ["#include <stdint.h>"]
                     ["#include <stdbool.h>"]
                     generateArrTypes parser
+                    (reverse $ _newDecls parser)
                     (reverse $ _generatedCodes parser)
                     where (>>)=(++)
             return $ intercalate "\n" $ all_codes
@@ -69,6 +70,10 @@ module Typekernel.Transpiler where
     emit s=C4mParser $ do
             indent<-fmap _indent get
             zoom generatedCodes $ modify ((:) $ (replicate (4*indent) ' ')++s)
+    emitDecl :: String->C4mParser ()
+    emitDecl s=C4mParser $ do
+            indent<-fmap _indent get
+            zoom newDecls $ modify ((:) s)
     incIndent :: C4mParser ()
     incIndent=C4mParser $ zoom indent $ modify (+1) 
     decIndent :: C4mParser ()

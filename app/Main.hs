@@ -13,11 +13,16 @@ import Typekernel.Structure
 import Typekernel.MLens
 import qualified Typekernel.Loader.Main
 import System.IO
+import System.Environment
+import System.Exit
+import qualified Data.Map as Map
+import System.Console.GetOpt
+import Data.List
 expr :: C ()
 expr=defMain $ mdo
         emit "// RAII Start"
         runRAII $ do
-            mem<-construct $ zeroBasic (Proxy :: Proxy UInt32) 
+            mem<-construct $ zeroBasic
             a<-liftC $ immUInt32 114514
             liftC $ mset (basic (Proxy :: Proxy UInt32)) (scopedValue mem) a
             return ()
@@ -41,13 +46,32 @@ expr=defMain $ mdo
         emit $ "printf(\"The sum is %d\\n\"," ++ (metadata ret) ++ ");"
 generateCode :: String->C ()->IO ()
 generateCode name ast=do
-    putStrLn $ "Generating "++name++".c"
+    putStrLn $ "Generating "++name
     code<-compile ast
-    writeFile (name++".c") code
+    writeFile (name) code
     return ()
+
+snippets = Map.fromList [
+    ("expr", expr),
+    ("bootloader", Typekernel.Loader.Main.main)
+    ]
+
+exit    = exitWith ExitSuccess
+pdie     = exitWith (ExitFailure 1)
+generate :: String->String->IO ()
+generate code output=
+    case Map.lookup code snippets of
+        Nothing-> putStrLn "Program name not found." >> pdie
+        (Just c)-> generateCode output c
+
 main :: IO ()
 main = do
     putStrLn "********************************\nTypekernel Code Generator\n********************************"
-    generateCode "expr" expr
-    generateCode "bootloader" Typekernel.Loader.Main.main
-    putStrLn "********************************\nTypekernel Code Generator Done.\n********************************"
+    args<-getArgs
+    case args of
+        [code]->generate code (code++".c")
+        [code, output]->generate code output
+        _ ->  putStrLn $ "Programs: "++(intercalate ", " $ Map.keys snippets)
+    --generateCode "expr" expr
+    --generateCode "bootloader" Typekernel.Loader.Main.main
+    -- putStrLn "********************************\nTypekernel Code Generator Done.\n********************************"
