@@ -5,6 +5,7 @@ boot: target/typeboot.efi
 target/typeboot.efi: target/bootloader.c
 	gcc target/bootloader.c              \
       -c                                 \
+      -O2 \
       -fno-stack-protector               \
       -fpic                              \
       -fshort-wchar                      \

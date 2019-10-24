@@ -98,3 +98,8 @@ module Typekernel.Nat where
         NUpRound8 N7=N8
         NUpRound8 N8=N8
         NUpRound8 (S(S(S(S(S(S(S(S a)))))))) = NUpRound8 (S a)
+
+    type family NMax (a::Nat) (b::Nat) :: Nat where
+        NMax Z b = b
+        NMax b Z = b
+        NMax (S a) (S b)=S (NMax a b)

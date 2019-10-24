@@ -43,6 +43,8 @@ module Typekernel.Structure where
     scope v = do
         handle<-onExit (finalize v)
         return $ Scoped v handle
+    useScope :: (Scoped a s m)->(a->RAII s m ())->RAII s m ()
+    useScope x op =op $ scopedValue x
     instance (MonadIO m, Lifetime a m)=>Move m (Scoped a) where
         dup v=do
             forget $ scopeFinHandle v
@@ -186,3 +188,56 @@ module Typekernel.Structure where
             finalize n1
             n2<-liftC $ sndS prod
             finalize n2
+
+    
+    data Typedef t a=Typedef {newtypeMem :: Memory (SizeOf a)}
+
+    type instance SizeOf (Typedef t a)=SizeOf a
+
+    untypeProxy :: (Typedef t a)->Proxy a
+    untypeProxy _=Proxy
+    untypedef :: (Structure m a, SizeOf a ~ m)=>Typedef t a->C a
+    untypedef x=restore (untypeProxy x) $ newtypeMem x
+    instance (SizeOf a ~ m, Structure m a)=>(Structure m (Typedef t a)) where
+        restore _ =return . Typedef
+    instance (MonadC env, Lifetime a env, Structure m a, SizeOf a ~ m)=>Lifetime (Typedef t a) env where
+        finalize x = do
+            y<-liftC $ untypedef x
+            finalize y
+    newtypeSize :: Typedef t a->Proxy (SizeOf a)
+    newtypeSize _ = Proxy
+    ctorNewtype :: (KnownNat n, MonadC m, Structure n a, SizeOf a ~ n)=>(Memory n->m a)->(Memory n->m (Typedef t a))
+    ctorNewtype ctor mem = do
+        obj<-liftC $ restore (Proxy::Proxy (Typedef t a)) mem
+        let offset=Proxy :: Proxy Z
+        let size=newtypeSize obj
+        submem<-liftC $ unsafeSubmemory (offset, size) (newtypeMem obj)
+        ctor submem
+        return obj
+
+    data Phantom = Phantom {phantomMem :: Memory Z}
+    type instance SizeOf Phantom=Z
+    instance Structure Z Phantom where
+        restore _ = return . Phantom
+
+    type family SumSize a b :: Nat where
+        SumSize a () = NAdd (SizeOf a) N8
+        SumSize a b = NMax (S (SizeOf a)) (SizeOf b)
+    class SumType a b (m::Nat) (n::Nat) | a->m, b->n where
+        data Sum a b
+        matchS :: (FirstClassList r, MonadC env)=>(a->env r)->(b->env r)->env r
+
+    type instance SizeOf (Sum a b) = SumSize a b
+
+    suma :: (SumType a b m n)=>Sum a b->Proxy a
+    sumb :: (SumType a b m n)=>Sum a b->Proxy b
+    suma _=Proxy
+    sumb _=Proxy
+    summ :: (SumType a b m n)=>Sum a b->Proxy (m::Nat)
+    summ _=Proxy
+    sumn :: (SumType a b m n)=>Sum a b->Proxy (n::Nat)
+    sumn _=Proxy
+    instance (KnownNat m, Structure m a)=>SumType a () m Z where
+        data Sum a ()=Sum {sumMem :: Memory (SizeOf (Sum a ()))}
+
+    --instance (KnownNat m, KnownNat n, Structure q c, SumType a b m n)=>SumType 

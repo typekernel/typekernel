@@ -12,12 +12,16 @@ module Typekernel.Loader.UEFI where
     import Data.Proxy
     import Typekernel.Std.StringLiteral
     import Typekernel.RAII
-    newtype UEFIAllocator = UEFIAllocator {allocatorInfo :: Product (Basic (Ptr UInt64)) (Basic UInt64)}
-    type instance SizeOf UEFIAllocator = SizeOf (Product (Basic (Ptr UInt64)) (Basic UInt64))
-    instance (SizeOf UEFIAllocator ~ n) => Structure n UEFIAllocator where
-        restore _=return . UEFIAllocator . Product
-    currentPointer = fstS . allocatorInfo
-    allocatedPageSize = sndS . allocatorInfo
+    data UEFIAllocator'
+
+    type UEFIAllocator=Typedef UEFIAllocator' (Product (Basic (Ptr UInt64)) (Basic UInt64))
+
+    --newtype UEFIAllocator = UEFIAllocator {allocatorInfo :: Product (Basic (Ptr UInt64)) (Basic UInt64)}
+    --type instance SizeOf UEFIAllocator = SizeOf (Product (Basic (Ptr UInt64)) (Basic UInt64))
+    --instance (SizeOf UEFIAllocator ~ n) => Structure n UEFIAllocator where
+    --    restore _=return . UEFIAllocator . Product
+    currentPointer x = untypedef x >>= fstS
+    allocatedPageSize x = untypedef x >>= sndS
     instance MemoryProvider UEFIAllocator where
         malloc' allocator sz = do
             addr<-(immUSize 0)
@@ -51,8 +55,9 @@ module Typekernel.Loader.UEFI where
         indented $ do
                 emit "InitializeLib(ImageHandle, SystemTable);"
                 runRAII $ do
-                    allocator<-construct (ctorProd zeroBasic zeroBasic)
-                    let services=UEFIServices $ (UEFIAllocator $ scopedValue allocator)
-                    liftC $ runUEFI services uefi
+                    alloc<-construct (ctorNewtype $ ctorProd zeroBasic zeroBasic)
+                    useScope alloc $ \allocator->liftC $ runUEFI (UEFIServices allocator) uefi
+                   
+                    
                 emit "return EFI_SUCCESS;"
         emit "}"
