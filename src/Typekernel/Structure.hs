@@ -19,6 +19,7 @@ module Typekernel.Structure where
     class (KnownNat n)=>Sized a n | a->n where
         size :: Proxy a->Proxy n
 
+    type family SizeOf a :: Nat
     -- Instance a is a structure, with size n.
     class Structure (n::Nat) a  | a->n where
         --move :: (Memory n)->a->m a
@@ -134,60 +135,9 @@ module Typekernel.Structure where
         mallocL'=claimUnsafe . RAII . lift . runUnsafe . mallocL'
         freeL'=((claimUnsafe .RAII . lift . runUnsafe) .). freeL'
 
-    type family SizeOf a :: Nat
-    -- Experimental Product Type. Using fstS and sndS to distinguish two sides.
-    class ProductType a b (m::Nat) (n::Nat) | a->m, b->n where
-        data Product a b
-        fstS :: Product a b->C a
-        sndS :: Product a b->C b
-    proda :: (ProductType a b m n)=>Product a b->Proxy a
-    prodb :: (ProductType a b m n)=>Product a b->Proxy b
-    proda _=Proxy
-    prodb _=Proxy
-    prodm :: (ProductType a b m n)=>Product a b->Proxy (m::Nat)
-    prodm _=Proxy
-    prodn :: (ProductType a b m n)=>Product a b->Proxy (n::Nat)
-    prodn _=Proxy
     round8 :: Proxy (a::Nat)->Proxy (NUpRound8 a)
     round8 _=Proxy
     
-    type instance SizeOf (Product a b)=(NAdd (NUpRound8 (SizeOf a)) (NUpRound8 (SizeOf b)))
-    instance (KnownNat m, KnownNat n, Structure m a, Structure n b)=>ProductType a b m n where
-        data Product a b=Product {productMem :: Memory (NAdd (NUpRound8 (SizeOf a)) (NUpRound8 (SizeOf b)))}
-        fstS prod=do
-            let offset=Proxy :: Proxy Z
-            let size=prodm prod
-            submem<-unsafeSubmemory (offset, size) (productMem prod)
-            restore (proda prod) submem
-        sndS prod=do
-            let size=prodn prod
-            msz<-immUSize $ fromIntegral $ roundUp $ prodm prod
-            submem<-unsafeSubmemory' (msz, size) (productMem prod)
-            restore (prodb prod) submem
-        
-    instance (ProductType a b m n, Structure m a, Structure n b, (NAdd (NUpRound8 (SizeOf a)) (NUpRound8 (SizeOf b))) ~ c)=>Structure c (Product a b) where
-        restore _=return . Product
-    
-    ctorProd :: (KnownNat m, KnownNat n, MonadC env, ProductType a b m n, Structure m a, Structure n b)=>(Memory m->env a)->(Memory n->env b)->(Memory (SizeOf (Product a b)))->env (Product a b)
-    ctorProd ca cb mem = do
-        prod<-liftC $ restore (Proxy::Proxy (Product a b)) mem
-        let offset=Proxy :: Proxy Z
-        let size=prodm prod
-        submem<-liftC $ unsafeSubmemory (offset, size) (productMem prod)
-        ca submem
-        let size=prodn prod
-        msz<-liftC $ immUSize $ fromIntegral $ roundUp $ prodm prod
-        submem<-liftC $ unsafeSubmemory' (msz, size) (productMem prod)
-        cb submem
-        return prod
-
-    instance (MonadC env, KnownNat m, KnownNat n, ProductType a b m n, Structure m a, Structure n b, Lifetime a env, Lifetime b env)=>Lifetime (Product a b) env where
-        --finalize :: a->m ()
-        finalize prod=do
-            n1<-liftC $ fstS prod
-            finalize n1
-            n2<-liftC $ sndS prod
-            finalize n2
 
     
     data Typedef t a=Typedef {newtypeMem :: Memory (SizeOf a)}
@@ -220,24 +170,4 @@ module Typekernel.Structure where
     instance Structure Z Phantom where
         restore _ = return . Phantom
 
-    type family SumSize a b :: Nat where
-        SumSize a () = NAdd (SizeOf a) N8
-        SumSize a b = NMax (S (SizeOf a)) (SizeOf b)
-    class SumType a b (m::Nat) (n::Nat) | a->m, b->n where
-        data Sum a b
-        matchS :: (FirstClassList r, MonadC env)=>(a->env r)->(b->env r)->env r
-
-    type instance SizeOf (Sum a b) = SumSize a b
-
-    suma :: (SumType a b m n)=>Sum a b->Proxy a
-    sumb :: (SumType a b m n)=>Sum a b->Proxy b
-    suma _=Proxy
-    sumb _=Proxy
-    summ :: (SumType a b m n)=>Sum a b->Proxy (m::Nat)
-    summ _=Proxy
-    sumn :: (SumType a b m n)=>Sum a b->Proxy (n::Nat)
-    sumn _=Proxy
-    instance (KnownNat m, Structure m a)=>SumType a () m Z where
-        data Sum a ()=Sum {sumMem :: Memory (SizeOf (Sum a ()))}
-
-    --instance (KnownNat m, KnownNat n, Structure q c, SumType a b m n)=>SumType 
+    

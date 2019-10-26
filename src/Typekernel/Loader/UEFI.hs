@@ -12,6 +12,7 @@ module Typekernel.Loader.UEFI where
     import Data.Proxy
     import Typekernel.Std.StringLiteral
     import Typekernel.RAII
+    import Typekernel.ProductType
     data UEFIAllocator'
 
     type UEFIAllocator=Typedef UEFIAllocator' (Product (Basic (Ptr UInt64)) (Basic UInt64))
