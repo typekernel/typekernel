@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, TypeOperators, GeneralizedNewtypeDeriving, KindSignatures, MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes, TypeOperators, GeneralizedNewtypeDeriving, KindSignatures, MultiParamTypeClasses, InstanceSigs, FlexibleInstances, ScopedTypeVariables #-}
 module Typekernel.RAII where
     import Control.Monad.Trans.Reader
     import Data.IORef
@@ -9,7 +9,6 @@ module Typekernel.RAII where
     import Control.Applicative
     import Control.Monad.Trans.Class
     import Control.Monad.IO.Class
-
     newtype RAII s m a=RAII {
             unRAII :: ReaderT (IORef [RefCountedFinalizer m]) m a
             }deriving ( Functor
@@ -18,11 +17,12 @@ module Typekernel.RAII where
             , Monad
             , MonadPlus
             , MonadFix
-            , MonadIO
             
             )
     instance MonadTrans (RAII s) where
         lift x=RAII $ lift x
+
+    
     type Finalizer m= m ()
     type RefCnt=Int
     data RefCountedFinalizer m= RefCountedFinalizer {
@@ -43,7 +43,7 @@ module Typekernel.RAII where
                 return $ FinalizerHandle h
     instance MonadC m=>MonadC (RAII s m) where
         liftC a=RAII $ lift $ liftC a
-    runRAII :: MonadIO m=>(forall s. RAII s m a)->m a
+    runRAII :: MonadC m=>(forall s. RAII s m a)->m a
     runRAII r=bracketc before after thing
         where
             bracketc before after thing=do
@@ -51,13 +51,13 @@ module Typekernel.RAII where
                 ret<-thing val
                 after val
                 return $ ret
-            before=liftIO $ newIORef []
+            before=liftC $ liftIO $ newIORef []
             thing=runReaderT (unRAII r)
             after ref=do
-                droppers<-liftIO $ readIORef ref
+                droppers<-liftC $ liftIO $ readIORef ref
                 forM_ droppers $ \fin->do
-                    refCnt <- liftIO $ decrement $ refCount fin
-                    when (refCnt == 0) $  finalizer fin
+                    refCnt <- liftC $ liftIO $ decrement $ refCount fin
+                    when (refCnt == 0) $ finalizer fin
                     where
                         decrement :: IORef RefCnt -> IO RefCnt
                         decrement ioRef = atomicModifyIORef ioRef $ \refCnt ->
@@ -66,10 +66,10 @@ module Typekernel.RAII where
     
     -- You can move h out as long as the basis monad of parent scope is m.
     class Move m h where
-        dup :: (MonadIO m)=> (h cs (RAII ps m))->RAII cs (RAII ps m) (h ps m)
+        dup :: (MonadC m)=> (h cs (RAII ps m))->RAII cs (RAII ps m) (h ps m)
         
     class Forget h where
-        forget :: MonadIO m => (h cs m)->RAII cs m ()
+        forget :: MonadC m => (h cs m)->RAII cs m ()
     -- In our means of FinalizerHandle, moving something out of scope is no longer a trivial thing.
     -- You have to prove that you may move something out by yourself.
     -- This is done by the sense that you can construct (RAII cs (RAII ps m) (h ps m)) by h itself.
@@ -82,6 +82,7 @@ module Typekernel.RAII where
             let FinalizerHandle h=handle
             liftIO $ increment $ refCount h
             return ()
+    
     
     {-
     data Scoped a s m=Scoped {scopedValue :: a, resFinalizer :: FinalizerHandle s m}

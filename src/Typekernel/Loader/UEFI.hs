@@ -36,7 +36,7 @@ module Typekernel.Loader.UEFI where
     }
 
     -- UEFI monad, configured to use an UEFI heap.
-    newtype UEFI a = UEFI {uefiToReader :: ReaderT UEFIServices C a} deriving (Monad, Functor, Applicative, MonadIO, MonadFix)
+    newtype UEFI a = UEFI {uefiToReader :: ReaderT UEFIServices C a} deriving (Monad, Functor, Applicative,  MonadFix)
     instance (MonadC UEFI) where
         liftC = UEFI . lift
     instance MonadHeap UEFI where
@@ -58,7 +58,7 @@ module Typekernel.Loader.UEFI where
                 runRAII $ do
                     alloc<-construct (ctorNewtype $ ctorProd zeroBasic zeroBasic)
                     useScope alloc $ \allocator->liftC $ runUEFI (UEFIServices allocator) uefi
-                   
+                    
                     
                 emit "return EFI_SUCCESS;"
         emit "}"

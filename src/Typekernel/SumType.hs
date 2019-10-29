@@ -26,7 +26,8 @@ module Typekernel.SumType where
     sumn _=Proxy
     instance (KnownNat m, Structure m a)=>SumType a () m Z where
         data Sum' a ()=Sum' {sumMem :: Memory (SizeOf (Sum' a ()))}
-
+        --matchS fa fb = do
+            
     type family Sum a b where
         Sum a (Sum' b c)=Sum' a (Sum' b c)
         Sum a b=Sum' a (Sum' b ())

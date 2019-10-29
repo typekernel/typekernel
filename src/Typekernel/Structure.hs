@@ -93,7 +93,6 @@ module Typekernel.Structure where
         , MonadPlus
         , MonadFix
         , MonadTrans
-        , MonadIO
         )
     instance MonadC m=>MonadC (Heap p m) where
         liftC a=Heap $ lift $ liftC a

@@ -15,7 +15,7 @@ module Typekernel.Transpiler where
     import Typekernel.Array
     data C4m=C4m {_generatedCodes :: [String], _symbolAlloc :: Int, _definedFuncs :: Int, _arrayAlloc :: Int, _indent :: Int, _declaredArrTypes :: Set.Set Int, _newDecls :: [String]} deriving (Show)
     makeLenses ''C4m
-    newtype C4mParser a=C4mParser {toState :: StateT C4m IO a} deriving (Monad, Applicative, Functor, MonadFix, MonadIO)
+    newtype C4mParser a=C4mParser {toState :: StateT C4m IO a} deriving (Monad, Applicative, Functor, MonadFix)
     
     emptyParser :: C4m
     emptyParser=C4m [] 0 0 0 0 Set.empty []
@@ -78,11 +78,11 @@ module Typekernel.Transpiler where
     incIndent=C4mParser $ zoom indent $ modify (+1) 
     decIndent :: C4mParser ()
     decIndent=C4mParser $ zoom indent $ modify (flip (-) 1) 
-    indented :: C4mParser a->C4mParser a
+    indented :: (MonadC m)=>m a->m a
     indented x=do
-        incIndent
+        liftC $ incIndent
         val<-x
-        decIndent
+        liftC $ decIndent
         return val
     proxyVal :: a->Proxy a
     proxyVal _ = Proxy
@@ -101,20 +101,20 @@ module Typekernel.Transpiler where
             let lista=listmetadata arga
             let listb=listmetadata argb
             mapM_ (\(a, b)->emit $ a++" = "++b++";") $ zip lista listb
-    namedFunction :: (FirstClass b, FirstClassList a)=>String->(a->C4mParser b)->C4mParser (Fn a b)
+    namedFunction :: (FirstClass b, FirstClassList a, MonadC m)=>String->(a->m b)->m (Fn a b)
     namedFunction funname fn=do
         let (aproxy, bproxy)=fnProxy fn
         let rettype=ctype bproxy
         let argtypes=listctype aproxy
-        arglist<-mapM (\arg->do {ident<-newIdent; return (arg, ident)}) argtypes
+        arglist<-liftC $ mapM (\arg->do {ident<-newIdent; return (arg, ident)}) argtypes
         let argstr=intercalate ", " $ fmap (\(t, k)->t++" "++k) arglist
-        emit $ rettype++" "++funname++"("++argstr++")"
-        emit "{"
+        liftC $ emit $ rettype++" "++funname++"("++argstr++")"
+        liftC $ emit "{"
         indented $ do
             let arguments=fmap snd arglist
             valb<-fn $ wraplist aproxy arguments
-            emit $ "return "++(metadata valb)++";"
-        emit "}"
+            liftC $ emit $ "return "++(metadata valb)++";"
+        liftC $ emit "}"
         return $ Fn funname
     instance C4mAST C4mParser where
         imm :: (Literal a l)=>l->C4mParser a
@@ -267,3 +267,6 @@ module Typekernel.Transpiler where
     class (Monad m)=>MonadC m where
         liftC :: C a->m a
     instance MonadC C4mParser where liftC = id
+
+    instance (MonadC m, Monad m)=>MonadIO m where
+        liftIO = liftC . C4mParser . lift
