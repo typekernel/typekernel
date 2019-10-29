@@ -1,4 +1,4 @@
-{-# LANGUAGE DataKinds, FlexibleInstances, FunctionalDependencies, UndecidableInstances, TypeFamilies #-}
+{-# LANGUAGE DataKinds, FlexibleInstances, FunctionalDependencies, UndecidableInstances, TypeFamilies, AllowAmbiguousTypes #-}
 module Typekernel.Std.Box where
     import Typekernel.C4mAST
     import Typekernel.Transpiler
@@ -8,12 +8,18 @@ module Typekernel.Std.Box where
     import Typekernel.Memory
     import Typekernel.MLens
     import Control.Monad.Trans.Class
-    data Box a =Box {boxPointer :: Memory N8}
-    type instance SizeOf (Box a)=N8
+    import Typekernel.Std.Basic
+
+    data Box'
+
+    type Box a = Typedef Box' (Basic USize)
+
+    --data Box a =Box {boxPointer :: Memory N8}
+    --type instance SizeOf (Box a)=N8
     boxType :: Box a->Proxy a
     boxType _ =Proxy
-    instance (Structure n a)=>Structure N8 (Box a) where
-        restore _=return . Box
+    --instance (Structure n a)=>Structure N8 (Box a) where
+    --    restore _=return . Box
         {-
         finalize box = do
             content<-derefBox box
@@ -22,12 +28,14 @@ module Typekernel.Std.Box where
             mem `assign` boxPointer box
             return $ box{boxPointer=mem}
         -}
-    instance (MonadHeap m, Structure n a, MonadC m, Lifetime a m)=>Lifetime (Box a) m where
-        finalize box=do
-            content<-liftC $ derefBox box
-            ref<-liftC $ restore (boxType box) content
-            finalize ref
+    --instance (MonadHeap m, Structure n a, MonadC m, Lifetime a m)=>Lifetime (Box a) m where
+    --    finalize box=do
+    --        content<-liftC $ derefBox box
+    --        ref<-liftC $ restore (boxType box) content
+    --        finalize ref
     -- Get memory of box
+    boxPointer :: Box a->Memory N8
+    boxPointer (Typedef mem)=mem
     derefBox :: (Structure n a)=>Box a->C (Memory n)
     derefBox box = do
         addr<-mget (dword (Proxy :: Proxy Z)) $ boxPointer box
@@ -43,5 +51,5 @@ module Typekernel.Std.Box where
         a<-ctor ptr
         addr<-liftC $ cast (Proxy :: Proxy USize) (memStart ptr)
         liftC $ mset (dword (Proxy :: Proxy Z)) mem addr 
-        return $ Box mem
+        return $ Typedef mem
     

@@ -45,6 +45,8 @@ module Typekernel.Loader.UEFI where
     instance MonadLog UEFI where
         logStringLiteral lit=liftC $ do
             emit $ "Print(L\"%a\", "++(metadata $ rawPointer lit)++");"
+        logString str=liftC $ do
+            emit $ "Print(L\"%a\", "++(show str)++");"
     runUEFI :: UEFIServices->UEFI a->C a
     runUEFI s ma=runReaderT (uefiToReader ma) s
     uefiMain :: UEFI ()->C ()

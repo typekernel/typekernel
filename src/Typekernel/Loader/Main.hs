@@ -1,3 +1,4 @@
+{-# LANGUAGE QuasiQuotes #-}
 module Typekernel.Loader.Main where
     import Typekernel.Loader.UEFI
     import Typekernel.Transpiler
@@ -6,6 +7,6 @@ module Typekernel.Loader.Main where
     app :: UEFI ()
     app =do
         lit<-stringL "Warm welcome from Typekernel Typeboot!\n"
-        putLog lit
+        [logF|My \{warm "welcome"\} is: {}|] lit
     main :: C ()
     main=uefiMain app

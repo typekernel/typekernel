@@ -27,6 +27,7 @@ dependencies:
 - lens
 - transformers
 - adjunctions
+- conduit
 library:
   source-dirs: src
 
