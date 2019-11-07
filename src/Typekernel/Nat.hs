@@ -97,9 +97,27 @@ module Typekernel.Nat where
         NUpRound8 N6=N8
         NUpRound8 N7=N8
         NUpRound8 N8=N8
-        NUpRound8 (S(S(S(S(S(S(S(S a)))))))) = NUpRound8 (S a)
+        NUpRound8 (S(S(S(S(S(S(S(S a)))))))) = S(S(S(S(S(S(S(S(NUpRound8 a))))))))
 
+    type family NCeil8 (a::Nat) :: Nat where
+        NCeil8 Z=Z
+        NCeil8 N1=N1
+        NCeil8 N2=N1
+        NCeil8 N3=N1
+        NCeil8 N4=N1
+        NCeil8 N5=N1
+        NCeil8 N6=N1
+        NCeil8 N7=N1
+        NCeil8 (S(S(S(S(S(S(S(S a))))))))=S (NCeil8 a)
     type family NMax (a::Nat) (b::Nat) :: Nat where
         NMax Z b = b
         NMax b Z = b
         NMax (S a) (S b)=S (NMax a b)
+
+    class PeanoDec a t | a->t
+        
+    instance PeanoDec Z Z
+    instance PeanoDec (S s) s
+    
+    decN :: (PeanoDec a t)=>Proxy a->Proxy t
+    decN _ = Proxy

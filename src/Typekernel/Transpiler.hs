@@ -13,12 +13,12 @@ module Typekernel.Transpiler where
     import Debug.Trace
     import Prelude
     import Typekernel.Array
-    data C4m=C4m {_generatedCodes :: [String], _symbolAlloc :: Int, _definedFuncs :: Int, _arrayAlloc :: Int, _indent :: Int, _declaredArrTypes :: Set.Set Int, _newDecls :: [String]} deriving (Show)
+    data C4m=C4m {_generatedCodes :: [String], _symbolAlloc :: Int, _definedFuncs :: Int, _arrayAlloc :: Int, _indent :: Int, _declaredArrTypes :: Set.Set Int, _newDecls :: [String], _scopeIds :: Int} deriving (Show)
     makeLenses ''C4m
     newtype C4mParser a=C4mParser {toState :: StateT C4m IO a} deriving (Monad, Applicative, Functor, MonadFix)
     
     emptyParser :: C4m
-    emptyParser=C4m [] 0 0 0 0 Set.empty []
+    emptyParser=C4m [] 0 0 0 0 Set.empty [] 0
     runParser :: C4mParser a->C4m->IO (a, C4m)
     runParser=runStateT . toState
 
@@ -66,6 +66,13 @@ module Typekernel.Transpiler where
             modify (+1)
             return v
         return $ "a_"++ show val
+    newScope :: C4mParser String
+    newScope = C4mParser $ do
+        val<-zoom scopeIds $ do
+            v<-get
+            modify (+1)
+            return v
+        return $ show val
     emit :: String->C4mParser ()
     emit s=C4mParser $ do
             indent<-fmap _indent get

@@ -17,8 +17,8 @@ module Typekernel.Std.Basic where
     instance (FirstClass a)=>Structure N8 (Basic a) where
         restore _=return . Basic
     
-    basic :: (FirstClass a)=>Proxy a->MLens C (Basic a) a
-    basic pa= mkMLens getter setter where
+    basic' :: (FirstClass a)=>Proxy a->MLens C (Basic a) a
+    basic' pa= mkMLens getter setter where
                 getter mem = do
                     let (Memory ptr)=basicVal mem
                     let ppa=promotePtr pa
@@ -29,13 +29,16 @@ module Typekernel.Std.Basic where
                     let ppa=promotePtr pa
                     ptra<-cast ppa ptr
                     mref ptra v
-
-    zeroBasic :: Memory N8->C (Basic a)
-    zeroBasic mem = do
+    basic :: (FirstClass a)=>MLens C (Basic a) a
+    basic = basic' Proxy
+    immBasic :: Integer->Memory N8->C (Basic a)
+    immBasic t mem = do
         let b=Basic mem
-        zero<-immUInt64 0
-        mset (basic (Proxy :: Proxy UInt64)) b zero
+        zero<-immUInt64 t
+        mset (basic' (Proxy :: Proxy UInt64)) b zero
         return $ Basic mem
+    zeroBasic :: Memory N8->C (Basic a)
+    zeroBasic = immBasic 0
 
     type instance SizeOf (Basic a)=N8
     --type Arr2=Product (Product (Basic UInt8) (Basic UInt8)) (Basic UInt16)

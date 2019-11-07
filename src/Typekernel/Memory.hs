@@ -50,7 +50,8 @@ module Typekernel.Memory where
     byte :: (KnownNat m, PeanoLT m n True, MonadC env)=>Proxy (m::Nat)->MLens env (Memory n) UInt8
     half :: (KnownNat m, PeanoLT (S m) n True, PeanoMod2 m Z, MonadC env)=>Proxy (m::Nat)->MLens env (Memory n) UInt16
     word :: (KnownNat m, PeanoLT  (S (S (S m))) n True, PeanoMod4 m Z, MonadC env)=>Proxy (m::Nat)->MLens env (Memory n) UInt32
-    dword :: (KnownNat m, PeanoLT (S (S (S (S (S (S (S m))))))) n True, PeanoMod8 m Z, MonadC env)=>Proxy (m::Nat)->MLens env (Memory n) UInt64
+    dword :: (KnownNat m, PeanoLT (S (S (S (S (S (S (S m))))))) n True, PeanoMod8 m Z, MonadC env)=>
+        Proxy (m::Nat)->MLens env (Memory n) UInt64
     byte=unsafeByte
     half=unsafeHalf
     word=unsafeWord
@@ -123,16 +124,16 @@ module Typekernel.Memory where
                 pp<-(cast (Proxy::Proxy (Ptr UInt64)) newptr)
                 mref pp a
             in mkMLens getter setter
-    bit :: (KnownNat n, PeanoLT n N8 True)=>Proxy n->CLens C UInt8 Boolean
+    bit :: (MonadC m, KnownNat n, PeanoLT n N8 True)=>Proxy n->CLens m UInt8 Boolean
     bit pn = mkCLens getter setter where
                 tup tt=(tt, Void)
                 untup (tt, Void)=tt
-                getter s = do
+                getter s = liftC $ do
                     bit<-immUInt8 (2^(natToInt pn))
                     mask<-binary opOr bit s
                     zero<-immUInt8 0
                     binary opCGE mask zero
-                setter s a = do
+                setter s a = liftC $ do
                     bit<-immUInt8 (2^(natToInt pn))
                     unmask<-unary opInvert bit
                     let b1=fmap tup $ binary opOr s bit
@@ -140,3 +141,8 @@ module Typekernel.Memory where
                     t<-if' a b1 b2
                     return $ untup t
                     
+    remoteMemory :: (C4mAST m1, KnownNat m2,
+        PeanoLT ('S ('S ('S ('S ('S ('S ('S m2))))))) n1 'True,
+        PeanoMod8 m2 'Z, MonadC m1) =>
+        Proxy m2 -> Memory n1 -> m1 (Memory n2)
+    remoteMemory pn mem=do {addr<-mget (dword pn) mem; ptr<-cast (Proxy :: Proxy (Ptr UInt64)) addr; return $ Memory ptr}

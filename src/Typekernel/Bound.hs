@@ -44,6 +44,9 @@ module Typekernel.Bound where
     defunS :: (MonadC m, FirstClassList a, FirstClass b)=>( a->(forall s. RAII s m b))->m (SFn m a b)
     defunS fn = do
         name<-liftC $ newFunc
+        defunSNamed name fn
+    defunSNamed :: (MonadC m, FirstClassList a, FirstClass b)=>String->( a->(forall s. RAII s m b))->m (SFn m a b)
+    defunSNamed name fn=do
         let invokedfn a = runRAII $ fn a
         fn<-namedFunction name invokedfn
         wrapSFn fn
@@ -59,4 +62,9 @@ module Typekernel.Bound where
         liftC $ emit $ rettype++" "++k++" = "++fnname++"("++argstr++");"
         return $ wrap bproxy k
     --liftB2 :: (MonadTrans t, Monad m, Monad (t m))=>(a->b->m c)->t m a->t m b->t m c
-    
+    recursion :: (FirstClass b, FirstClassList a, MonadC m)=>((a->m b)->a->(forall s. RAII s m b))->m (SFn m a b)
+    recursion fn = do
+        fname<-liftC $ newFunc
+        shortcircuit<-wrapSFn $ Fn fname
+        let partial=invokeS shortcircuit
+        defunSNamed fname (fn partial)

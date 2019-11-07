@@ -70,7 +70,14 @@ module Typekernel.MLens where
     -- For example: RLens IO (IORef (IORef Int)) (IORef Int) is natural, and modifying the gotten IORef influences the original state.
     --type RLens m s a=forall f. (Traversable f)=>(a->m (f ()))->(s-> m (f ()))
 
-   
+    wrapPred :: (Monad m)=>(ns->s)->MLens m s a->MLens m ns a
+    wrapPred fu lens=mkMLens getter setter where
+            getter = (mget lens ). fu
+            setter ns=mset lens (fu ns)
+    wrapSucc :: (Monad m)=>(na->a)->(a->na)->MLens m s a->MLens m s na
+    wrapSucc fu fw lens = mkMLens getter setter where
+            getter s = fmap fw $ mget lens s
+            setter s na= mset lens s (fu na)
     -- Lens composation
     -- Composation of MLens
     (|>) :: (Monad m)=>MLens m s a->MLens m a b->MLens m s b

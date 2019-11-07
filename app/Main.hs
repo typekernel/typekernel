@@ -24,7 +24,7 @@ expr=defMain $ mdo
         runRAII $ do
             mem<-construct $ zeroBasic
             a<-liftC $ immUInt32 114514
-            liftC $ mset (basic (Proxy :: Proxy UInt32)) (scopedValue mem) a
+            liftC $ mset basic (scopedValue mem) a
             return ()
         emit "// RAII End"
         a<-immInt32 10

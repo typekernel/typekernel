@@ -16,6 +16,9 @@ module Typekernel.Std.Log where
     class (Monad m)=>MonadLog m where
         logString :: String->m ()
         logStringLiteral :: StringLiteral->m ()
+        logInteger :: UInt64->m ()
+        logChar :: UInt8->m ()
+        logHex :: UInt64->m ()
 
     instance Loggable StringLiteral where
         putLog=logStringLiteral
@@ -33,10 +36,14 @@ module Typekernel.Std.Log where
         logf proxy=do
 
     -}
-
+    debugLogPlaceholder :: (FirstClass a)=>a->IO ()
+    debugLogPlaceholder a=putStr $ "{-# Placeholder <"++(metadata a)++">#-}"
     instance MonadLog IO where
         logString = putStr
         logStringLiteral (StringLiteral (Ptr id))=putStr $ "{-# StringLiteral <"++id++"> #-}"
+        logInteger = debugLogPlaceholder
+        logChar = debugLogPlaceholder
+        logHex = debugLogPlaceholder
     data FToken = FRawString String | FPlaceHolder String (Maybe Name) deriving Show
     data ParserSTM=ParserSTM {isInBracket :: Bool, currentStr :: String, parsedTokens :: [FToken], slashed :: Bool} deriving Show
     

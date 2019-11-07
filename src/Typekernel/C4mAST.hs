@@ -215,19 +215,31 @@ module Typekernel.C4mAST where
 
     data Memory (n::Nat)=Memory {memStart :: Ptr USize} deriving Show
     class MonadFix m=>C4mAST m where
+        -- Creating immediate numbers.
         imm :: (Literal a l)=>l->m a
+        -- Unary operations.
         unary :: (Unary op b a)=>Proxy op->b->m a
+        -- Binary operations.
         binary :: (Binary op t1 t2 a)=>Proxy op->t1->t2->m a 
+        -- Define a (nested) function.
         defun :: (FirstClass b, FirstClassList a)=>(a->m b)->m (Fn a b)
+        -- Invoke a (nested) function.
         invoke :: (FirstClassList a, FirstClass b)=>(Fn a b)->a->m b
         -- We don't support taking function pointer out. However, invoking pointers is necessary.
         invokep :: (FirstClassList a, FirstClass b)=>(Ptr (Fn a b))->a->m b
+        -- If-statement.
         if' :: (FirstClassList a)=>Boolean->m a->m a->m a
+        -- Force casting.
         cast :: (Castable a b, FirstClass a, FirstClass b)=>Proxy b->a->m b
+        -- Define an array on stack. Used by stack objects in RAII.
         defarr :: (KnownNat n)=>Proxy n->m (Memory n)
+        -- Assign a structure to another. Used as a hint for C compilers for optimizations like copy elision.
         assign :: (KnownNat n)=>Memory n->Memory n->m ()
+        -- Dereference a pointer.
         deref :: (FirstClass a)=>Ptr a->m a
+        -- Modify a pointer.
         mref :: (FirstClass a)=>Ptr a->a->m ()
+        
         --Let :: C4mAST b->(C4mAST b->a)->C4mAST a
 
 
