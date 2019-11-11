@@ -40,5 +40,23 @@ module Typekernel.Std.Basic where
     zeroBasic :: Memory N8->C (Basic a)
     zeroBasic = immBasic 0
 
+    ctorBasic :: (FirstClass a)=>a->Memory N8->C (Basic a)
+    ctorBasic a mem = do
+        ba<-zeroBasic mem
+        mset basic ba a
+        return ba
     type instance SizeOf (Basic a)=N8
     --type Arr2=Product (Product (Basic UInt8) (Basic UInt8)) (Basic UInt16)
+
+    data FixedBuffer (n::Nat)=FixedBuffer {fixedBufferMem :: Memory (NUpRound8 n)}
+
+    instance (Monad m)=>Lifetime (Basic a) m
+
+    instance (NUpRound8 n ~ m)=>Structure m (FixedBuffer n) where
+        restore _=return . FixedBuffer
+    
+    ctorFixedBuffer :: (MonadC env, NUpRound8 n ~ m)=>Proxy n=>Memory m->env (FixedBuffer n)
+    ctorFixedBuffer _ =restore
+    
+    
+    

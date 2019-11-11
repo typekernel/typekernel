@@ -19,6 +19,16 @@ module Typekernel.Constant where
 
     instance (Show a)=>Show (Vec a n) where
         show = show . toListV
+
+    class VectorNat (n::Nat) where
+        vectorNat :: Vec Int n
+    instance VectorNat Z where
+        vectorNat =Nil
+    instance (VectorNat n)=>VectorNat (S n) where
+        vectorNat =0:-(mapV (+1) vectorNat)
+    
+    vectorNat' :: (VectorNat n)=>Proxy n->Vec Int n
+    vectorNat' _=vectorNat
     mapV :: (a -> b) -> Vec a n -> Vec b n
 
     mapV _ Nil=Nil
@@ -77,3 +87,9 @@ module Typekernel.Constant where
 
     (++:) = concatV
     
+    mapMV :: (Monad m)=>(a->m b)->Vec a n->m (Vec b n)
+    mapMV f Nil=return Nil
+    mapMV f (x:-xs) = do
+        mx<-f x
+        mxs<-mapMV f xs
+        return $ mx:-mxs

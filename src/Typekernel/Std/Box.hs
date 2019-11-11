@@ -53,3 +53,19 @@ module Typekernel.Std.Box where
         liftC $ mset (dword (Proxy :: Proxy Z)) mem addr 
         return $ Typedef mem
     
+    data Ref'
+    type Ref a=Typedef Ref' (Basic USize)
+
+    refAddress :: (MonadC m, Structure n a, SizeOf a ~ n)=>(Proxy a)->Memory n->Constructor m (Ref a)
+    refAddress _ ms mem = liftC $ do
+        addr<-cast (Proxy :: Proxy UInt64) (memStart ms)
+        ctorNewtype (ctorBasic addr) mem
+
+    refPointer :: Ref a->Memory N8
+    refPointer (Typedef mem)=mem
+
+    derefRef :: (MonadC m, Structure n a)=>Ref a->m a
+    derefRef ref = liftC $ do
+        addr<-mget (dword (Proxy :: Proxy Z)) $ refPointer ref
+        ptr<-cast (Proxy :: Proxy (Ptr USize)) addr
+        restore Proxy (Memory ptr)

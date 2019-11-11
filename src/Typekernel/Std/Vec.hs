@@ -112,7 +112,8 @@ module Typekernel.Std.Vec where
     instance (MonadC m, KnownNat n, Structure n a, SizeOf a ~ n, ArrayCtor m arr a s n,
              Structure n0 arr, SizeOf arr ~ n0, 
              NMul s n ~ n0, NMul ('S s) n ~ NAdd (NUpRound8 n) (NUpRound8 n0),
-             KnownNat n0, (KnownNat (NAdd (NUpRound8 n) (NUpRound8 n0))))=>ArrayCtor m (Typedef (Array' (S s) a) (Product a arr)) a (S s) n where
+             KnownNat n0, (KnownNat (NAdd (NUpRound8 n) (NUpRound8 n0))))
+             =>ArrayCtor m (Typedef (Array' (S s) a) (Product a arr)) a (S s) n where
         unsafeCtorArray pa (ctor:ctors) =
             let ctorleft=ctor
                 ctorright=unsafeCtorArray (rightArr pa) ctors

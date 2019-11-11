@@ -47,16 +47,27 @@ module Typekernel.Loader.UEFI where
             emit $ "Print(L\"%a\", "++(metadata $ rawPointer lit)++");"
         logString str=liftC $ do
             emit $ "Print(L\"%a\", "++(show str)++");"
+
+    allocatePage :: UEFI UInt64
+    allocatePage = do
+        addr<-liftC $ immUInt64 0
+        status<-liftC $ immUInt64 0
+        liftC $ emit $ (metadata status)++"=uefi_call_wrapper(SystemTable->BootServices->AllocatePages, 4, AllocateAnyPages,EfiLoaderData,1,&"++(metadata addr)++");"
+        liftC $ emit $ "Print(L\"Allocate status: %r %lx\\n\", "++(metadata status)++", "++(metadata addr)++");"
+        return addr
     runUEFI :: UEFIServices->UEFI a->C a
     runUEFI s ma=runReaderT (uefiToReader ma) s
     uefiMain :: UEFI ()->C ()
     uefiMain uefi = do
         emit "#include <efi.h>"
         emit "#include <efilib.h>"
+        emit "EFI_SYSTEM_TABLE* GlobalST;"
+        emit "extern uint64_t* __vectors[];"
         emit "EFI_STATUS EFIAPI efi_main (EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable)"
         emit "{"
         indented $ do
                 emit "InitializeLib(ImageHandle, SystemTable);"
+                emit "GlobalST=SystemTable;"
                 runRAII $ do
                     alloc<-construct (ctorNewtype $ ctorProd zeroBasic zeroBasic)
                     useScope alloc $ \allocator->liftC $ runUEFI (UEFIServices allocator) uefi
@@ -64,3 +75,4 @@ module Typekernel.Loader.UEFI where
                     
                 emit "return EFI_SUCCESS;"
         emit "}"
+        emit "void trap_handler(){Print(L\"Breakpoint hit in Typekernel!\\n\");asm volatile(\"cli;\");}"

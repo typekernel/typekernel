@@ -3,7 +3,7 @@ all: boot kernel
 boot: target/typeboot.efi
 
 target/typeboot.efi: target/bootloader.c
-	gcc target/bootloader.c              \
+	gcc target/bootloader.c             \
       -c                                 \
       -O2 \
       -fno-stack-protector               \
@@ -14,7 +14,8 @@ target/typeboot.efi: target/bootloader.c
       -I /usr/include/efi/x86_64 \
       -DEFI_FUNCTION_WRAPPER             \
       -o target/typeboot.o
-	ld target/typeboot.o                         \
+	gcc arch/x86_64/trap.S -c -O2 -fno-stack-protector -fpic -fshort-wchar -mno-red-zone -o target/trap.o
+	ld target/typeboot.o target/trap.o                         \
      /usr/lib/crt0-efi-x86_64.o     \
      -nostdlib                      \
      -znocombreloc                  \
@@ -55,4 +56,5 @@ qemu:
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,file=${OVMF},readonly=on \
 		-drive format=raw,file=target/typekernel.img,if=ide \
-		-net none
+		-net none -m 1G \
+            -serial mon:stdio -d int
