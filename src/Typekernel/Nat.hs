@@ -10,7 +10,7 @@ module Typekernel.Nat where
     -- may need -freduction-depth=0 to use deeper depth.
     $(return $ generateNat 1024 'Z 'S)
     
-
+    
     
     class KnownNat n where
         natToInt :: Proxy n->Int
@@ -19,6 +19,8 @@ module Typekernel.Nat where
     instance KnownNat n=>KnownNat (S n) where
         natToInt _=1+natToInt (Proxy :: Proxy n)
 
+    extractNat :: a n->Proxy n
+    extractNat _ = Proxy
     -- Peano algebras
 
     class PeanoEqual a b t | a b->t

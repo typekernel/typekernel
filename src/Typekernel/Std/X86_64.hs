@@ -48,7 +48,7 @@ module Typekernel.Std.X86_64 where
     data IDTItem'
     type IDTItem = Typedef IDTItem' (Product (Basic UInt64) (Basic UInt64))
     data IDTTable'
-    type IDTTable = Typedef IDTTable' (Array N256 IDTItem)
+    type IDTTable = Typedef IDTTable' (Array N7 IDTItem)
 
     emptyIDTItem :: (MonadC m)=>Constructor m IDTItem
     emptyIDTItem mem = liftC $ ctorNewtype (ctorProd zeroBasic zeroBasic) mem

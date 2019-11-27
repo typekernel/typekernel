@@ -10,6 +10,7 @@ module Typekernel.Loader.Main where
     import Typekernel.Std.Vec
     import Typekernel.Structure
     import Data.Proxy
+    import Typekernel.Nat
     
     app :: UEFI ()
     app =do
@@ -23,7 +24,7 @@ module Typekernel.Loader.Main where
         mem_state<-liftC $ cast (Proxy :: Proxy (Ptr UInt64)) mem_state
         let memgdt=Memory pg_gdt
         let memidt=Memory pg_idt
-        let idt_table=mapV (const (vectoredIDTItem 3 False Ring0)) $ vectorNat' (Proxy :: Proxy 256)
+        let idt_table=mapV (\x-> (vectoredIDTItem x False Ring0)) $ vectorNat' (Proxy :: Proxy N7)
         let idt_ctor=ctorNewtype (ctorArray idt_table)
         initializeX86_64 memgdt memidt idt_ctor (Memory mem_state)
         --[logF|x86_64 Environment prepared. Now triggering a breakpoint...{}|] "\n"

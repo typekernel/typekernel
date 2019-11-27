@@ -50,13 +50,14 @@ module Typekernel.Std.Basic where
 
     data FixedBuffer (n::Nat)=FixedBuffer {fixedBufferMem :: Memory (NUpRound8 n)}
 
-    instance (Monad m)=>Lifetime (Basic a) m
+    type instance SizeOf (FixedBuffer n)=NUpRound8 n
+    instance (Monad m)=>Lifetime (FixedBuffer a) m
 
     instance (NUpRound8 n ~ m)=>Structure m (FixedBuffer n) where
         restore _=return . FixedBuffer
     
-    ctorFixedBuffer :: (MonadC env, NUpRound8 n ~ m)=>Proxy n=>Memory m->env (FixedBuffer n)
-    ctorFixedBuffer _ =restore
+    ctorFixedBuffer :: (MonadC env, NUpRound8 n ~ m)=>Proxy n->Memory m->env (FixedBuffer n)
+    ctorFixedBuffer _ m =liftC $  restore Proxy m
     
-    
+
     

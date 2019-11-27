@@ -28,6 +28,7 @@ dependencies:
 - transformers
 - adjunctions
 - conduit
+- aeson
 library:
   source-dirs: src
 
