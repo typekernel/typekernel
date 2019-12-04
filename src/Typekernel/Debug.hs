@@ -7,5 +7,5 @@ module Typekernel.Debug where
 
     -- Warning: this kills your cat!
     -- This is only used for testing code generation in GHCi.
-    instance (Show a)=>Show (C4mParser a) where
+    instance (Show a)=>Show (C a) where
         show a=unsafePerformIO $ fmap show $ runParser a emptyParser

@@ -11,11 +11,11 @@ module Typekernel.Loader.Main where
     import Typekernel.Structure
     import Data.Proxy
     import Typekernel.Nat
-    
+    import Typekernel.Vec
     app :: UEFI ()
     app =do
         lit<-stringL "Warm welcome from Typekernel Typeboot!\n"
-        [logF|My \{warm "welcome"\} is: {}|] lit
+        --[logF|My \{warm "welcome"\} is: {}|] lit
         pg_gdt<-allocatePage
         pg_gdt<-liftC $ cast (Proxy :: Proxy (Ptr UInt64)) pg_gdt
         pg_idt<-allocatePage 
@@ -28,20 +28,20 @@ module Typekernel.Loader.Main where
         let idt_ctor=ctorNewtype (ctorArray idt_table)
         initializeX86_64 memgdt memidt idt_ctor (Memory mem_state)
         --[logF|x86_64 Environment prepared. Now triggering a breakpoint...{}|] "\n"
-        liftC $ emit $ "asm volatile (\"int $0x03\");"
-        liftC $ emit "asm volatile(\"cli;\");"
+        --liftC $ emit $ "asm volatile (\"int $0x03\");"
+        --liftC $ emit "asm volatile(\"cli;\");"
         [logF|returning from handler{}|] "\n"
-        liftC $ emit "asm volatile(\"cli;\");"
-        liftC $ emit "asm volatile(\"hlt;\");"
-        liftC $ emit $ "asm volatile (\"int $0x03\");"
+        --liftC $ emit "asm volatile(\"cli;\");"
+        --liftC $ emit "asm volatile(\"hlt;\");"
+        --liftC $ emit $ "asm volatile (\"int $0x03\");"
         [logF|returning from handler{}|] "\n"
-        liftC $ emit "asm volatile(\"cli;\");"
-        liftC $ emit $ "asm volatile (\"int $0x03\");"
+        --liftC $ emit "asm volatile(\"cli;\");"
+        --liftC $ emit $ "asm volatile (\"int $0x03\");"
         [logF|returning from handler{}|] "\n"
-        liftC $ emit "asm volatile(\"cli;\");"
-        liftC $ emit $ "asm volatile (\"int $0x03\");"
+        --liftC $ emit "asm volatile(\"cli;\");"
+        --liftC $ emit $ "asm volatile (\"int $0x03\");"
         [logF|returning from handler{}|] "\n"
-        liftC $ emit "asm volatile(\"cli;\");"
+        --liftC $ emit "asm volatile(\"cli;\");"
 
         return ()
     main :: C ()

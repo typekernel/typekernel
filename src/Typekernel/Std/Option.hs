@@ -7,6 +7,6 @@ module Typekernel.Std.Option where
     import Typekernel.Constant
     -- One important usage for Option is to simulate uninitialized static variables.
     -- For example, we leave out a static var filled with None, and initialize it when we need to use it.
-    staticVar :: (Structure n a, KnownNat n)=>Proxy a->C (Memory n)
+    --staticVar :: (Structure n a, KnownNat n)=>Proxy a->C (Memory n)
 
-    staticVar pn = bssSeg (memSize pn)
+    --staticVar pn = bssSeg (memSize pn)

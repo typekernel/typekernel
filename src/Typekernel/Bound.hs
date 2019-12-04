@@ -9,6 +9,7 @@ module Typekernel.Bound where
     import Typekernel.RAII
     import Typekernel.Structure
     import Data.List
+    import Typekernel.IR
     class (MonadTrans t)=>Bound t where
         (>>>=) :: (Monad m, Monad (t m))=>t m a->(a->m b)->t m b
         (>>>=) a f=a >>= (lift . f)
@@ -23,19 +24,28 @@ module Typekernel.Bound where
 
     ifS val btrue bfalse = do
         let proxy=proxyMVal btrue
+        scopeTrue<-subScope $ runRAII btrue
+        scopeFalse<-subScope $ runRAII bfalse
         temp<-liftC $ initList proxy
-        liftC $ emit $ "if("++(metadata val)++")"
-        liftC $ emit "{"
-        indented $ do
-            vtrue<-runRAII btrue
-            liftC $ assignList temp vtrue
-        liftC $ emit "}"
-        liftC $ emit "else {"
-        indented $ do
-            vfalse<-runRAII bfalse
-            liftC $ assignList temp vfalse
-        liftC $ emit "}"
+        liftC $ emitIR $ IRTernary 
+            (zip (fmap typeToName $ listctype $ proxyVal temp) (listmetadata temp))
+            (metadata val)
+            (snd scopeTrue, listmetadata $ fst scopeTrue)
+            (snd scopeFalse, listmetadata $ fst scopeFalse)
         return temp
+        --temp<-liftC $ initList proxy
+        --liftC $ emit $ "if("++(metadata val)++")"
+        --liftC $ emit "{"
+        --indented $ do
+        --    vtrue<-runRAII btrue
+        --    liftC $ assignList temp vtrue
+        --liftC $ emit "}"
+        --liftC $ emit "else {"
+        --indented $ do
+        --    vfalse<-runRAII bfalse
+        --    liftC $ assignList temp vfalse
+        --liftC $ emit "}"
+        --return temp
     
     -- Tag function with a monad, preventing unwanted escape.
     data SFn m a b=SFn {toFun :: Fn a b}
@@ -57,9 +67,12 @@ module Typekernel.Bound where
         let rettype=ctype bproxy
         let (Fn fnname)=fn
         k<-liftC $ newIdent
+
         let arglist=listmetadata args
         let argstr=intercalate ", " arglist
-        liftC $ emit $ rettype++" "++k++" = "++fnname++"("++argstr++");"
+        let argtypes=fmap typeToName $ listctype aproxy
+        liftC $ emitIR $ IRInvoke fnname (typeToName rettype, k) arglist
+        --emit $ rettype++" "++k++" = "++fnname++"("++argstr++");"
         return $ wrap bproxy k
     --liftB2 :: (MonadTrans t, Monad m, Monad (t m))=>(a->b->m c)->t m a->t m b->t m c
     recursion :: (FirstClass b, FirstClassList a, MonadC m)=>((a->m b)->a->(forall s. RAII s m b))->m (SFn m a b)

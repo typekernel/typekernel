@@ -29,6 +29,7 @@ dependencies:
 - adjunctions
 - conduit
 - aeson
+- bytestring
 library:
   source-dirs: src
 

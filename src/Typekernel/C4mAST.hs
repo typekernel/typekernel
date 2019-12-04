@@ -26,6 +26,9 @@ module Typekernel.C4mAST where
     arraySize :: Arr n a->Proxy n
     arraySize _=Proxy
 
+
+    
+
     fnProxy :: (a->m b)->(Proxy a, Proxy b)
     fnProxy _=(Proxy, Proxy)
     fnProxyVal :: (Fn a b)->(Proxy a, Proxy b)
@@ -62,6 +65,7 @@ module Typekernel.C4mAST where
 
     instance (FirstClass a)=>FirstClass (Ptr a) where {ctype _=(ctype (Proxy:: Proxy a))++"*"; metadata (Ptr m)=m; wrap _=Ptr}
 
+    
 
     data Void=Void
     instance FirstClassList Void where
@@ -213,7 +217,14 @@ module Typekernel.C4mAST where
     instance Castable (Ptr a) UInt64
     instance Castable (Ptr a) (Ptr b)
 
+
+    -- Since we are using a new IR, MemoryPiece can be seen as a first-type member.
     data Memory (n::Nat)=Memory {memStart :: Ptr USize} deriving Show
+
+    memoryProxySize :: Proxy (Memory n)->Proxy n
+    memoryProxySize _=Proxy
+    --instance (KnownNat n)=>FirstClass (Memory n) where {ctype mem="array<"++(show $ natToInt $ memoryProxySize mem)++">"; metadata (Memory (Ptr m))=m; wrap _=Memory . Ptr}
+
     class MonadFix m=>C4mAST m where
         -- Creating immediate numbers.
         imm :: (Literal a l)=>l->m a
@@ -223,8 +234,12 @@ module Typekernel.C4mAST where
         binary :: (Binary op t1 t2 a)=>Proxy op->t1->t2->m a 
         -- Define a (nested) function.
         defun :: (FirstClass b, FirstClassList a)=>(a->m b)->m (Fn a b)
+        -- Define a nested function with multiple return values.
+        --defunM :: (FirstClassList b, FirstClassList a)=>(a->m b)->m (Fn a b)
         -- Invoke a (nested) function.
         invoke :: (FirstClassList a, FirstClass b)=>(Fn a b)->a->m b
+        -- Invoke a nested function with multiple return values.
+        --invokeM :: (FirstClassList a, FirstClassList b)=>(Fn a b)->a->m b
         -- We don't support taking function pointer out. However, invoking pointers is necessary.
         invokep :: (FirstClassList a, FirstClass b)=>(Ptr (Fn a b))->a->m b
         -- If-statement.

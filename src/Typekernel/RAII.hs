@@ -48,14 +48,14 @@ module Typekernel.RAII where
         where
             bracketc before after thing=do
                 scopeid<-liftC $ newScope
-                liftC $ emit $ "// scope "++scopeid++" begin"
-                liftC $ incIndent
+                --liftC $ emit $ "// scope "++scopeid++" begin"
+                --liftC $ incIndent
                 val<-before
                 ret<-thing val
-                liftC $ emit $ "// scope "++scopeid++" finalize"
+                --liftC $ emit $ "// scope "++scopeid++" finalize"
                 after val
-                liftC $ decIndent 
-                liftC $ emit $ "// scope "++scopeid++" end"
+                --liftC $ decIndent 
+                --liftC $ emit $ "// scope "++scopeid++" end"
                 return $ ret
             before=liftC $ liftIO $ newIORef []
             thing=runReaderT (unRAII r)

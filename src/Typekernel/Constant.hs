@@ -9,65 +9,32 @@ module Typekernel.Constant where
     import Data.Proxy
     import Data.Bits
     import Data.List (intersperse)
-
-    data Vec a (n::Nat) where 
-        Nil :: Vec a Z
-        (:-) :: a->Vec a n -> Vec a (S n)
-
-    infixr :-
-
-
-    instance (Show a)=>Show (Vec a n) where
-        show = show . toListV
-
-    class VectorNat (n::Nat) where
-        vectorNat :: Vec Int n
-    instance VectorNat Z where
-        vectorNat =Nil
-    instance (VectorNat n)=>VectorNat (S n) where
-        vectorNat =0:-(mapV (+1) vectorNat)
+    import Typekernel.Vec
     
-    vectorNat' :: (VectorNat n)=>Proxy n->Vec Int n
-    vectorNat' _=vectorNat
-    mapV :: (a -> b) -> Vec a n -> Vec b n
-
-    mapV _ Nil=Nil
-    mapV f (x:-xs)=(f x):-(mapV f xs)
 
 
-    toListV :: Vec a n->[a]
+    --dataSeg :: (KnownNat n)=>Vec Word8 n->C (Memory n)
+    --dataSeg vec = do
+    --    let l=toListV vec
+    --    let sz=sizeV vec
+    --    arrname<-newArray
+    --    ptrname<-newIdent
+    --    emitDecl $ "char "++arrname++" ["++(show $ natToInt $ sz)++"]={"
+    --    indented $ emit $ concat $ intersperse ", " $ map show l
+    --    emitDecl $ "};"
+    --    emitDecl $ "uint64_t* "++ptrname++" = "++arrname++";"
+    --    return $ Memory $ Ptr ptrname
 
-    toListV Nil=[]
-    toListV (x:-xs)=x:(toListV xs)
-
-    sizeV :: Vec a n->Proxy n
-    sizeV _=Proxy
-
-
-    dataSeg :: (KnownNat n)=>Vec Word8 n->C (Memory n)
-    dataSeg vec = do
-        let l=toListV vec
-        let sz=sizeV vec
-        arrname<-newArray
-        ptrname<-newIdent
-        emitDecl $ "char "++arrname++" ["++(show $ natToInt $ sz)++"]={"
-        indented $ emit $ concat $ intersperse ", " $ map show l
-        emitDecl $ "};"
-        emitDecl $ "uint64_t* "++ptrname++" = "++arrname++";"
-        return $ Memory $ Ptr ptrname
-
-    bssSeg :: (KnownNat n)=>Proxy n->C (Memory n)
-    bssSeg sz=do
-        arrname<-newArray
-        ptrname<-newIdent
-        emitDecl $ "char "++arrname++" ["++(show $ natToInt $ sz)++"];"
-        emitDecl $ "uint64_t* "++ptrname++" = "++arrname++";"
-        return $ Memory $ Ptr ptrname
+    --bssSeg :: (KnownNat n)=>Proxy n->C (Memory n)
+    --bssSeg sz=do
+    --    arrname<-newArray
+    --    ptrname<-newIdent
+    --    emitDecl $ "char "++arrname++" ["++(show $ natToInt $ sz)++"];"
+    --    emitDecl $ "uint64_t* "++ptrname++" = "++arrname++";"
+    --    return $ Memory $ Ptr ptrname
 
        
-    concatV :: Vec a m->Vec a n->Vec a (NAdd m n)
-    concatV Nil xs = xs
-    concatV (x:-xs) ys = x:-(concatV xs ys)
+    
 
     singleByte :: Word8->Vec Word8 N1
     singleByte w = w :-Nil
@@ -85,11 +52,4 @@ module Typekernel.Constant where
                     :- (fromIntegral $ ((h `shiftR` 32) .&. 0xff)) :- (fromIntegral $ ((h `shiftR` 40) .&. 0xff))
                     :- (fromIntegral $ ((h `shiftR` 48) .&. 0xff)) :- (fromIntegral $ ((h `shiftR` 56) .&. 0xff)) :- Nil
 
-    (++:) = concatV
     
-    mapMV :: (Monad m)=>(a->m b)->Vec a n->m (Vec b n)
-    mapMV f Nil=return Nil
-    mapMV f (x:-xs) = do
-        mx<-f x
-        mxs<-mapMV f xs
-        return $ mx:-mxs

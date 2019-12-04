@@ -4,46 +4,114 @@ module Typekernel.IR where
     import Data.Aeson
     import Typekernel.C4mAST
     import Typekernel.Nat
-    data IRDatatype=IInt8 | IUInt8 | IInt16 | IUInt16 | IInt32 | IUInt32 | IInt64 | IUInt64 | IMemory Int |
-                    IPInt8 | IPUInt8 | IPInt16 | IPUInt16 | IPInt32 | IPUInt32 | IPInt64 | IPUInt64 deriving (Generic, Show)
-    data IRLiteral = IInteger Integer | IFloat Float | IDouble Double deriving (Generic, Show)
+    import Debug.Trace
+    import Data.Word
+    import qualified Data.ByteString.Lazy as BS
+    data IRDatatype=IInt8 | IUInt8 | IInt16 | IUInt16 | IInt32 | IUInt32 | IInt64 | IUInt64   deriving (Generic, Show)
+    data IRLiteral = IInteger Integer deriving (Generic, Show)
+    
     data IRStmt =
+        IRExternFun {
+            iName :: String,
+            iReturnType :: IRDatatype,
+            iArgumentType :: [IRDatatype]
+        } |
         IRFun {
             iName :: String,
-            iReturnField :: [(IRDatatype, String)],
+            iReturnField :: (IRDatatype, String),
             iArgumentField :: [(IRDatatype, String)],
-            iFuncBody :: IRStmt
+            iFuncBody :: [IRStmt]
         } |
         IRImm {
             iUName :: (IRDatatype, String),
-            iLiteral :: IRLiteral
+            iLiteral :: String
         } |
+        {-
+            Possible values: [
+                ("Add", "+"), 
+                ("Sub", "-"), 
+                ("Mul", "*"), 
+                ("Div", "/"), 
+                ("Mod", "%"), 
+                ("Xor", "^"), 
+                ("Or", "|"), 
+                ("And", "&"), 
+                ("CEQ", "=="), 
+                ("CLT", "<"), 
+                ("CGT", ">"),
+                ("CLE", "<="),
+                ("CGE", ">="),
+                ("CNE", "!="),
+                ("LShift", "<<"),
+                ("RShift", ">>")]
+        -}
         IRBinary {
             iUName :: (IRDatatype, String),
             iOperator :: String,
-            iOperand1 :: (IRDatatype, String),
-            iOperand2 :: (IRDatatype, String)
+            iOperand1 :: String,
+            iOperand2 :: String
         } | 
+        {- 
+            Possible values: ("Invert", "~"),
+                             ("Neg", "-"),
+                             ("Not", "!"),  
+        -}
         IRUnary {
             iUName :: (IRDatatype, String),
             iOperator :: String,
-            iOperand :: (IRDatatype, String)
+            iOperand ::  String
         } |
         IRInvoke {
-            iLName :: [(IRDatatype, String)],
-            iArguments :: [(IRDatatype, String)]
+            iInvokedFun :: String,
+            iUName :: (IRDatatype, String),
+            iArguments :: [String]
         } |
         IRTernary {
             iLName :: [(IRDatatype, String)],
-            iTOperand1 :: [(IRDatatype, String)],
-            iTOperand2 :: [(IRDatatype, String)],
-            iTOperand3 :: [(IRDatatype, String)]
+            iTOperand1 :: String,
+            -- Pairs of statements and returned names.
+            iTOperand2 :: ([IRStmt], [String]),
+            -- Pairs of statements and returned names.
+            iTOperand3 :: ([IRStmt], [String])
         } |
-        IRSeq {
-            iSequence :: [IRStmt]
+        IRCast {
+            iUName :: (IRDatatype, String),
+            iOperand :: String
+        } |
+        -- Allocate a given size of memory on stack. The result will always be (Ptr UInt64).
+        -- The size is used as some hint.
+        IRAlloca {
+            iName :: String,
+            iMemSize :: Int
+        } |
+        -- Give hint on a pointer about its size. The operation will always be performed on (Ptr UInt64).
+        -- Ignoring the hint will not cause a failure, but using the hint helps make a more precise pointer reference analysis.
+        IRMemoryHint {
+            iName ::String,
+            iMemSize :: Int
+        } |
+        IRMemcpy {
+            iMemSize :: Int,
+            iDest :: String,
+            iSource :: String
+        } |
+        IRDeref {
+            iDest :: String,
+            iSource :: String
+        } |
+        IRModifyRef {
+            iDest :: String,
+            iSource :: String
+        } |
+        IRStringLiteral {
+            iName :: String,
+            iStringLiteral :: String
         }
         deriving (Generic, Show)
 
+    type Program = ([String], [IRStmt])
+    compileProgram :: Program->String
+    compileProgram = (map (toEnum.fromIntegral).(BS.unpack)) . encode
     instance ToJSON IRDatatype
     instance FromJSON IRDatatype
     instance ToJSON IRLiteral
@@ -54,40 +122,13 @@ module Typekernel.IR where
     class IRDatatypeCast a b | a->b where
         castDatatype :: a->(b, String)
 
-    instance IRDatatypeCast Int8 IRDatatype where
-        castDatatype (Int8 x)=(IInt8, x)
-    instance IRDatatypeCast UInt8 IRDatatype where
-        castDatatype (UInt8 x)=(IUInt8, x)
-    instance IRDatatypeCast Int16 IRDatatype where
-        castDatatype (Int16 x)=(IInt16, x)
-    instance IRDatatypeCast UInt16 IRDatatype where
-        castDatatype (UInt16 x)=(IUInt16, x)
-    instance IRDatatypeCast Int32 IRDatatype where
-        castDatatype (Int32 x)=(IInt32, x)
-    instance IRDatatypeCast UInt32 IRDatatype where
-        castDatatype (UInt32 x)=(IUInt32, x)
-    instance IRDatatypeCast Int64 IRDatatype where
-        castDatatype (Int64 x)=(IInt64, x)
-    instance IRDatatypeCast UInt64 IRDatatype where
-        castDatatype (UInt64 x)=(IUInt64, x)
-    instance (KnownNat n)=>IRDatatypeCast (Memory n) IRDatatype where
-        castDatatype memory@(Memory (Ptr mem))=(IMemory (natToInt $ extractNat memory), mem)
-    
-    instance IRDatatypeCast (Ptr Int8) IRDatatype where
-        castDatatype (Ptr x)=(IPInt8, x)
-    instance IRDatatypeCast (Ptr UInt8) IRDatatype where
-        castDatatype (Ptr x)=(IPUInt8, x)
-    instance IRDatatypeCast (Ptr Int16) IRDatatype where
-        castDatatype (Ptr x)=(IPInt16, x)
-    instance IRDatatypeCast (Ptr UInt16) IRDatatype where
-        castDatatype (Ptr x)=(IPUInt16, x)
-    instance IRDatatypeCast (Ptr Int32) IRDatatype where
-        castDatatype (Ptr x)=(IPInt32, x)
-    instance IRDatatypeCast (Ptr UInt32) IRDatatype where
-        castDatatype (Ptr x)=(IPUInt32, x)
-    instance IRDatatypeCast (Ptr Int64) IRDatatype where
-        castDatatype (Ptr x)=(IPInt64, x)
-    instance IRDatatypeCast (Ptr UInt64) IRDatatype where
-        castDatatype (Ptr x)=(IPUInt64, x)
-    instance IRDatatypeCast (Ptr (Ptr a)) IRDatatype where
-        castDatatype (Ptr x)=(IPUInt64, x)
+    typeToName :: String->IRDatatype
+    typeToName "int8_t"=IInt8
+    typeToName "uint8_t"=IUInt8
+    typeToName "int16_t"=IInt16
+    typeToName "uint16_t"=IUInt16
+    typeToName "int32_t"=IInt32
+    typeToName "uint32_t"=IUInt32
+    typeToName "int64_t"=IInt64
+    typeToName "uint64_t"=IUInt64
+    typeToName x = trace ("Warning: unknown datatype "++x++". Falling back to uint64_t.") IUInt64

@@ -14,6 +14,8 @@ module Typekernel.Std.X86_64 where
     import Data.Bits
     import Data.Proxy
 
+    import Typekernel.Vec
+
     -- TODO: a beautiful compile-time evaluation.
     kcode =0x0020980000000000
     ucode =0x0020F80000000000
@@ -65,8 +67,8 @@ module Typekernel.Std.X86_64 where
         addr<-immUInt64 0
         --emit $ "EFI_LOADED_IMAGE *loaded_image = NULL;"
         --emit $ "uefi_call_wrapper(SystemTable->BootServices->HandleProtocol,3, ImageHandle,&LoadedImageProtocol,(void **)&loaded_image);"
-        emit $ "extern uint64_t vector"++(show index)++";"
-        emit $ (metadata addr) ++" = ((uint64_t)(&vector"++(show index)++"));"
+        --emit $ "extern uint64_t vector"++(show index)++";"
+        --emit $ (metadata addr) ++" = ((uint64_t)(&vector"++(show index)++"));"
         ist<-immUInt64 0
         exist<-immUInt64 0x800000000000
         r<-immUInt64 $ fromIntegral ((ringToInt ring) `shiftL` 45)
@@ -106,49 +108,63 @@ module Typekernel.Std.X86_64 where
     gdtElemCnt _=Proxy
     gdtTableSize :: (KnownNat s)=>GDTTable s->Int
     gdtTableSize table = (natToInt (gdtElemCnt table) + 1) * (natToInt $ memSize (Proxy :: Proxy GDTItem))
+    
+    externlgdtidt :: C ()
+    externlgdtidt = onceC "externlgdtidt"$ do
+        let emit s=emitCDecl [s]
+        emit "uint64_t fn_lgdt(uint16_t limit, uint64_t base){"
+        emit "    struct {uint16_t pd_lim; uint64_t pd_base;} __attribute__ ((packed)) item;"
+        emit "    item.pd_lim=limit; item.pd_base=base;"
+        emit "    asm volatile (\"lgdt (%0);\" :: \"r\"(&item):\"memory\");return 0;"
+        emit "}"
+        emit "uint64_t fn_lidt(uint16_t limit, uint64_t base){"
+        emit "    struct {uint16_t pd_lim; uint64_t pd_base;} __attribute__ ((packed)) item;"
+        emit "    item.pd_lim=limit; item.pd_base=base;"
+        emit "    asm volatile(\"cli;\");"
+        emit "    asm volatile (\"lidt (%0);\" :: \"r\"(&item):\"memory\");return 0;"
+        emit "}"
+        return ()
     -- TODO: virtual address versus real address.
     lgdt :: (KnownNat s)=>GDTTable s->C ()
     lgdt table = do
-        id<-newIdent
-        emit $ "struct {uint16_t pd_lim; uint64_t pd_base;} __attribute__ ((packed)) "++id++ ";"
+        externlgdtidt
+        f<-externFunction "fn_lgdt" (Proxy :: Proxy (UInt16, (UInt64, Void))) (Proxy :: Proxy UInt64)
         limit<-immUInt16 $ fromIntegral ((gdtTableSize table) -1)
         let base=memStart $ newtypeMem table 
-        emit $ id++".pd_lim="++(metadata limit)++";"
-        emit $ id++".pd_base="++(metadata base)++";"
-        emit $ "Print(L\"limit = %ld, base = %lx\\n\", (uint64_t)"++id++".pd_lim, "++id++".pd_base);"
-        emit $ "asm volatile (\"lgdt (%0);\" :: \"r\"(&"++id++"):\"memory\");"
+        base<-cast (Proxy :: Proxy UInt64) base
+        invoke f (limit, (base, Void))
+        return ()
     lidt :: IDTTable->C ()
     lidt table = do
-        id<-newIdent
-        emit $ "struct {uint16_t pd_lim; uint64_t pd_base;} __attribute__ ((packed)) "++id++ ";"
+        externlgdtidt
+        f<-externFunction "fn_lidt" (Proxy :: Proxy (UInt16, (UInt64, Void))) (Proxy :: Proxy UInt64)
         limit<-immUInt16 $ (256*16-1)
-        let base=memStart $ newtypeMem table 
-        emit $ id++".pd_lim="++(metadata limit)++";"
-        emit $ id++".pd_base="++(metadata base)++";"
-        emit "asm volatile(\"cli;\");"
-        emit $ "asm volatile (\"lidt (%0);\" :: \"r\"(&"++id++"):\"memory\");"
+        let base=memStart $ newtypeMem table
+        base<-cast (Proxy :: Proxy UInt64) base
+        invoke f (limit, (base, Void))
+        return ()
 
     --lidt :: IDTTable->C ()
     -- Initialize an x86_64 CPU core, with GDT and IDT ready.
     initializeX86_64 :: (MonadC m)=>Memory (SizeOf TypekernelGDT)->Memory (SizeOf IDTTable)->Constructor m IDTTable->Constructor m Stx86_64
     initializeX86_64 mgdt midt ctoridt mem= do
-        liftC $ emit "asm volatile(\"cli;\");"
-        liftC $ emit $ "Print(L\"Start init\\n\");"
+        --liftC $ emit "asm volatile(\"cli;\");"
+        --liftC $ emit $ "Print(L\"Start init\\n\");"
         zero<-liftC $ immUInt64 0
         gdt<-tssToGDT zero mgdt
-        liftC $ emit $ "Print(L\"lgdt\\n\");"
+        --liftC $ emit $ "Print(L\"lgdt\\n\");"
         --liftC $ lgdt gdt
-        liftC $ emit $ "Print(L\"lgdt done\\n\");"
-        liftC $ emit $ "Print(L\"lgdt done\\n\");"
-        liftC $ emit $ "Print(L\"lgdt done\\n\");"
-        liftC $ emit $ "Print(L\"lgdt done\\n\");"
+        --liftC $ emit $ "Print(L\"lgdt done\\n\");"
+        --liftC $ emit $ "Print(L\"lgdt done\\n\");"
+        --liftC $ emit $ "Print(L\"lgdt done\\n\");"
+        --liftC $ emit $ "Print(L\"lgdt done\\n\");"
         -- Load TSS.
         --emit $ "asm volatile (\"ltr $"++(show 7*8)++";\");"
-        liftC $ emit $ "Print(L\"Start lidt\\n\");"
-        liftC $ emit $ "Print(L\"Start lidt\\n\");"
-        liftC $ emit $ "Print(L\"Start lidt\\n\");"
+        --liftC $ emit $ "Print(L\"Start lidt\\n\");"
+        --liftC $ emit $ "Print(L\"Start lidt\\n\");"
+        --liftC $ emit $ "Print(L\"Start lidt\\n\");"
         idt<-ctoridt midt
-        liftC $ emit $ "Print(L\"lidt\\n\");"
+        --liftC $ emit $ "Print(L\"lidt\\n\");"
         liftC $ lidt idt
         --liftC $ emit $ "for(;;);"
         --liftC $ emit $ "Print(L\"lidt done\\n\");"

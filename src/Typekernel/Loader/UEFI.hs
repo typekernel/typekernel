@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleInstances, TypeFamilies, UndecidableInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleInstances, TypeFamilies, UndecidableInstances, MultiParamTypeClasses, ScopedTypeVariables #-}
 module Typekernel.Loader.UEFI where
     import Typekernel.Structure
     import Typekernel.C4mAST
@@ -13,6 +13,7 @@ module Typekernel.Loader.UEFI where
     import Typekernel.Std.StringLiteral
     import Typekernel.RAII
     import Typekernel.ProductType
+    import Debug.Trace
     data UEFIAllocator'
 
     type UEFIAllocator=Typedef UEFIAllocator' (Product (Basic (Ptr UInt64)) (Basic UInt64))
@@ -28,7 +29,7 @@ module Typekernel.Loader.UEFI where
             addr<-(immUSize 0)
             mem<-(cast (Proxy::(Proxy (Ptr USize)))) addr
             let p=metadata mem
-            emit $ ""
+            --emit $ ""
             return mem
     data UEFIServices = UEFIServices {
         uefiAllocator :: UEFIAllocator
@@ -42,37 +43,45 @@ module Typekernel.Loader.UEFI where
     instance MonadHeap UEFI where
     --    malloc= asks (uefiAllocator 
 
+    
     instance MonadLog UEFI where
-        logStringLiteral lit=liftC $ do
-            emit $ "Print(L\"%a\", "++(metadata $ rawPointer lit)++");"
-        logString str=liftC $ do
-            emit $ "Print(L\"%a\", "++(show str)++");"
+        --logStringLiteral lit=liftC $ do
+        --    emit $ "Print(L\"%a\", "++(metadata $ rawPointer lit)++");"
+        --logString str=liftC $ do
+        --    emit $ "Print(L\"%a\", "++(show str)++");"
 
     allocatePage :: UEFI UInt64
     allocatePage = do
         addr<-liftC $ immUInt64 0
         status<-liftC $ immUInt64 0
-        liftC $ emit $ (metadata status)++"=uefi_call_wrapper(SystemTable->BootServices->AllocatePages, 4, AllocateAnyPages,EfiLoaderData,1,&"++(metadata addr)++");"
-        liftC $ emit $ "Print(L\"Allocate status: %r %lx\\n\", "++(metadata status)++", "++(metadata addr)++");"
+        --liftC $ emit $ (metadata status)++"=uefi_call_wrapper(SystemTable->BootServices->AllocatePages, 4, AllocateAnyPages,EfiLoaderData,1,&"++(metadata addr)++");"
+        --liftC $ emit $ "Print(L\"Allocate status: %r %lx\\n\", "++(metadata status)++", "++(metadata addr)++");"
         return addr
     runUEFI :: UEFIServices->UEFI a->C a
     runUEFI s ma=runReaderT (uefiToReader ma) s
     uefiMain :: UEFI ()->C ()
     uefiMain uefi = do
-        emit "#include <efi.h>"
-        emit "#include <efilib.h>"
-        emit "EFI_SYSTEM_TABLE* GlobalST;"
-        emit "extern uint64_t* __vectors[];"
-        emit "EFI_STATUS EFIAPI efi_main (EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable)"
-        emit "{"
-        indented $ do
-                emit "InitializeLib(ImageHandle, SystemTable);"
-                emit "GlobalST=SystemTable;"
-                runRAII $ do
+        obj<-ensureObject "uefiMain"
+        if obj then do
+            let emit str=emitCDecl [str]
+            emit "#include <efi.h>"
+            emit "#include <efilib.h>"
+            emit "EFI_SYSTEM_TABLE* GlobalST;"
+            emit "extern uint64_t* __vectors[];"
+            
+            emit "EFI_STATUS EFIAPI efi_main (EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE* SystemTable)"
+            emit "{"
+            emit "    uint64_t typekernel_bootloader_main();"
+            emit "    InitializeLib(ImageHandle, SystemTable);"
+            emit "    GlobalST=SystemTable;"
+            emit "    typekernel_bootloader_main();"
+                
+            emit "return EFI_SUCCESS;"
+            emit "}"
+            emit "void trap_handler(){Print(L\"Breakpoint hit in Typekernel!\\n\");asm volatile(\"cli;\");}"
+            namedFunction "typekernel_bootloader_main" (\(x::Void)-> runRAII $ do
                     alloc<-construct (ctorNewtype $ ctorProd zeroBasic zeroBasic)
                     useScope alloc $ \allocator->liftC $ runUEFI (UEFIServices allocator) uefi
-                    
-                    
-                emit "return EFI_SUCCESS;"
-        emit "}"
-        emit "void trap_handler(){Print(L\"Breakpoint hit in Typekernel!\\n\");asm volatile(\"cli;\");}"
+                    liftC $ immUInt64 0) 
+            return ()
+        else trace "Warning: uefiMain() called twice! ignoring..." $ return ()

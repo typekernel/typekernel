@@ -14,6 +14,7 @@ module Typekernel.Std.Vec where
     import Control.Monad
     import Typekernel.Memory
     import Typekernel.Constant
+    import Typekernel.Vec
     data Buffer'
 
     -- Runtime buffer.

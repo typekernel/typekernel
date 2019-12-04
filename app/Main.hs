@@ -19,14 +19,17 @@ import qualified Data.Map as Map
 import System.Console.GetOpt
 import Data.List
 expr :: C ()
-expr=defMain $ mdo
-        emit "// RAII Start"
+expr=do
+    onceC "echo_test" $ emitCDecl ["uint64_t echo_test(int32_t val){printf(\"The sum is %d\\n\", val);}"]
+    namedFunction "main" (\(x::Void)->mdo
+        echo<-externFunction "echo_test" (Proxy :: Proxy (Int32, Void)) (Proxy :: Proxy UInt64)
+        --emit "// RAII Start"
         runRAII $ do
             mem<-construct $ zeroBasic
             a<-liftC $ immUInt32 114514
             liftC $ mset basic (scopedValue mem) a
             return ()
-        emit "// RAII End"
+        --emit "// RAII End"
         a<-immInt32 10
         b<-immInt32 20
         arr<-defarr (Proxy :: Proxy N100)
@@ -42,8 +45,11 @@ expr=defMain $ mdo
             binary opAdd r x)
         s<-invoke fsum (a, Void)
         ret<-binary opAdd a s
-
-        emit $ "printf(\"The sum is %d\\n\"," ++ (metadata ret) ++ ");"
+        invoke echo (ret, Void)
+        zero<-immInt32 0;
+        return zero)
+    return ()
+        --emit $ "printf(\"The sum is %d\\n\"," ++ (metadata ret) ++ ");"
 generateCode :: String->C ()->IO ()
 generateCode name ast=do
     putStrLn $ "Generating "++name

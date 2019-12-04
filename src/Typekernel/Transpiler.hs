@@ -1,5 +1,4 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ScopedTypeVariables, PolyKinds, DataKinds, InstanceSigs, TemplateHaskell, GADTs, TypeFamilies, AllowAmbiguousTypes, FlexibleInstances, UndecidableInstances #-}
-{-# LANGUAGE RebindableSyntax #-}
 module Typekernel.Transpiler where
     import Control.Monad.State.Lazy
     import Control.Monad.IO.Class
@@ -13,125 +12,142 @@ module Typekernel.Transpiler where
     import Debug.Trace
     import Prelude
     import Typekernel.Array
-    data C4m=C4m {_generatedCodes :: [String], _symbolAlloc :: Int, _definedFuncs :: Int, _arrayAlloc :: Int, _indent :: Int, _declaredArrTypes :: Set.Set Int, _newDecls :: [String], _scopeIds :: Int} deriving (Show)
-    makeLenses ''C4m
-    newtype C4mParser a=C4mParser {toState :: StateT C4m IO a} deriving (Monad, Applicative, Functor, MonadFix)
+    import Typekernel.IR
+
+    data C4mIR=C4mIR {_generatedCodes :: [IRStmt], 
+        _symbolAlloc :: Int, 
+        _definedFuncs :: Int, 
+        _arrayAlloc :: Int, 
+        _indent :: Int, 
+        _declaredArrTypes :: Set.Set Int, 
+        _topDecls :: [IRStmt], 
+        _cDecls :: [String], 
+        _scopeIds :: Int, 
+        _ensuredObjects :: Set.Set String} deriving (Show)
+    makeLenses ''C4mIR
+    newtype C4mIRParser a=C4mIRParser {toState :: StateT C4mIR IO a} deriving (Monad, Applicative, Functor, MonadFix)
     
-    emptyParser :: C4m
-    emptyParser=C4m [] 0 0 0 0 Set.empty [] 0
-    runParser :: C4mParser a->C4m->IO (a, C4m)
+    compile :: C4mIRParser a->IO String
+    compile ast=do
+            (_, parser)<-runParser ast emptyParser
+            let program=(_cDecls parser, (_topDecls parser)++(_generatedCodes parser))
+            return $ trace (show program) compileProgram program
+    emptyParser :: C4mIR
+    emptyParser=C4mIR [] 0 0 0 0 Set.empty [] [] 0 Set.empty
+    runParser :: C4mIRParser a->C4mIR->IO (a, C4mIR)
     runParser=runStateT . toState
 
-    compile :: C4mParser a->IO String
-    compile ast=do
-            --let new_ast=do
-            --        emit "#include <stdint.h>"
-            --        emit "#include <stdbool.h>"
-            --        ast
-            (_, parser)<-runParser ast emptyParser
-            let all_codes = do
-                    ["#include <stdint.h>"]
-                    ["#include <stdbool.h>"]
-                    generateArrTypes parser
-                    (reverse $ _newDecls parser)
-                    (reverse $ _generatedCodes parser)
-                    where (>>)=(++)
-            return $ intercalate "\n" $ all_codes
-    defMain :: C4mParser b->C4mParser ()
-    defMain m = (namedFunction "main" $  (const (m >> (immInt32 0)) :: Void->C4mParser Int32)) >> return ()
-    
-    assureArrType :: Int->C4mParser ()
-    assureArrType n=C4mParser $ zoom declaredArrTypes (modify (Set.insert n)) >> return ()
+    ensureObject :: String->C4mIRParser Bool
+    ensureObject token = C4mIRParser $ zoom ensuredObjects $ do
+            val<-gets (Set.member token)
+            modify (Set.insert token)
+            return $ not val
 
-    generateArrTypes :: C4m->[String]
-    generateArrTypes p=map (\x->"typedef struct {uint64_t data["++(show x)++"];} arr_"++(show x)++";") $ Set.toList (_declaredArrTypes p)
-    newIdent :: C4mParser String
-    newIdent = C4mParser $ do
+    onceC :: String->C4mIRParser ()->C4mIRParser ()
+    onceC token command = do
+        val<-ensureObject token
+        if val
+            then command
+            else return ()
+
+    emitIR :: IRStmt->C4mIRParser ()
+    emitIR s=C4mIRParser $ do
+        zoom generatedCodes $ modify (\list->list++[s])
+    emitIRTop :: IRStmt->C4mIRParser ()
+    emitIRTop s=C4mIRParser $ do
+        zoom topDecls $ modify (\list->list++[s])
+    emitCDecl :: [String]->C4mIRParser ()
+    emitCDecl s=C4mIRParser $ do
+        zoom cDecls $ modify (\list->list++s)
+    newIdent :: C4mIRParser String
+    newIdent = C4mIRParser $ do
         val<-zoom symbolAlloc $ do
             v<-get
             modify (+1)
             return v
         return $ "t_"++ show val
-    newFunc :: C4mParser String
-    newFunc = C4mParser $ do
+    newFunc :: C4mIRParser String
+    newFunc = C4mIRParser $ do
         val<-zoom definedFuncs $ do
             v<-get
             modify (+1)
             return v
         return $ "f_"++ show val
-    newArray :: C4mParser String
-    newArray = C4mParser $ do
+    newArray :: C4mIRParser String
+    newArray = C4mIRParser $ do
         val<-zoom arrayAlloc $ do
             v<-get
             modify (+1)
             return v
         return $ "a_"++ show val
-    newScope :: C4mParser String
-    newScope = C4mParser $ do
+    newScope :: C4mIRParser String
+    newScope = C4mIRParser $ do
         val<-zoom scopeIds $ do
             v<-get
             modify (+1)
             return v
         return $ show val
-    emit :: String->C4mParser ()
-    emit s=C4mParser $ do
-            indent<-fmap _indent get
-            zoom generatedCodes $ modify ((:) $ (replicate (4*indent) ' ')++s)
-    emitDecl :: String->C4mParser ()
-    emitDecl s=C4mParser $ do
-            indent<-fmap _indent get
-            zoom newDecls $ modify ((:) s)
-    incIndent :: C4mParser ()
-    incIndent=C4mParser $ zoom indent $ modify (+1) 
-    decIndent :: C4mParser ()
-    decIndent=C4mParser $ zoom indent $ modify (flip (-) 1) 
-    indented :: (MonadC m)=>m a->m a
-    indented x=do
-        liftC $ incIndent
-        val<-x
-        liftC $ decIndent
-        return val
+
+    subScope :: (MonadC m)=>m a->m (a, [IRStmt])
+    subScope ma = do
+        val<-liftC $ C4mIRParser get
+        let val'=val {_generatedCodes=[]}
+        liftC $ C4mIRParser $ put val'
+        -- New scope.
+        ret<-ma
+        val2<-liftC $ C4mIRParser get
+        let code=_generatedCodes val2
+        liftC $ C4mIRParser $ put (val2 {_generatedCodes=_generatedCodes val})
+        -- New scope end.
+        return (ret, code)
     proxyVal :: a->Proxy a
     proxyVal _ = Proxy
 
     proxyMVal :: m a->Proxy a
     proxyMVal _ = Proxy
-    initList :: (FirstClassList a)=>Proxy a->C4mParser a
-    initList proxy=do
-            let argtypes=listctype proxy
-            arglist<-mapM (\arg->do {ident<-newIdent; return (arg, ident)}) argtypes
-            mapM_ (\(arg, ident)->emit $ arg++" "++ident++";") arglist
-            let vals=fmap snd arglist
-            return $ wraplist proxy vals
-    assignList :: (FirstClassList a)=>a->a->C4mParser ()
-    assignList arga argb=do
-            let lista=listmetadata arga
-            let listb=listmetadata argb
-            mapM_ (\(a, b)->emit $ a++" = "++b++";") $ zip lista listb
+
     namedFunction :: (FirstClass b, FirstClassList a, MonadC m)=>String->(a->m b)->m (Fn a b)
     namedFunction funname fn=do
         let (aproxy, bproxy)=fnProxy fn
         let rettype=ctype bproxy
         let argtypes=listctype aproxy
-        arglist<-liftC $ mapM (\arg->do {ident<-newIdent; return (arg, ident)}) argtypes
-        let argstr=intercalate ", " $ fmap (\(t, k)->t++" "++k) arglist
-        liftC $ emit $ rettype++" "++funname++"("++argstr++")"
-        liftC $ emit "{"
-        indented $ do
-            let arguments=fmap snd arglist
-            valb<-fn $ wraplist aproxy arguments
-            liftC $ emit $ "return "++(metadata valb)++";"
-        liftC $ emit "}"
+        arglist<-liftC $ mapM (\arg->do {ident<-newIdent; return (typeToName arg, ident)}) argtypes
+        (returnvalue, code)<-subScope (fn $ wraplist aproxy $ fmap snd arglist)
+        liftC $ emitIR $ IRFun funname (typeToName rettype, metadata returnvalue) arglist code
+        --let argstr=intercalate ", " $ fmap (\(t, k)->t++" "++k) arglist
+        --liftC $ emit $ rettype++" "++funname++"("++argstr++")"
+        --liftC $ emit "{"
+        --indented $ do
+        --    let arguments=fmap snd arglist
+        --    valb<-fn $ wraplist aproxy arguments
+        --    liftC $ emit $ "return "++(metadata valb)++";"
+        --liftC $ emit "}"
         return $ Fn funname
-    instance C4mAST C4mParser where
-        imm :: (Literal a l)=>l->C4mParser a
+   
+    initList :: (FirstClassList a)=>Proxy a->C4mIRParser a
+    initList proxy=do
+            let argtypes=listctype proxy
+            arglist<-mapM (\arg->do {ident<-newIdent; return (arg, ident)}) argtypes
+            --mapM_ (\(arg, ident)->emit $ arg++" "++ident++";") arglist
+            let vals=fmap snd arglist
+            return $ wraplist proxy vals
+
+
+    externFunction :: (FirstClass b, FirstClassList a)=>String->Proxy a->Proxy b->C (Fn a b)
+    externFunction fn aproxy bproxy = do
+        let rettype=ctype bproxy
+        let argtypes=listctype aproxy
+        onceC ("!!extern_function_"++fn) $ emitIRTop $ IRExternFun fn (typeToName rettype) (map typeToName argtypes)
+        return $ Fn fn
+    instance C4mAST C4mIRParser where
+        imm :: (Literal a l)=>l->C4mIRParser a
         imm literal=let proxy=literalProxy (Proxy :: Proxy a) in do
                 let t=rawtype proxy
                 k<-newIdent
                 let v=rawvalue proxy literal
-                emit $ t++" "++k++" = "++v++";"
+                emitIR $ IRImm (typeToName t, k) v
                 return $ wrapliteral proxy k
-        unary :: (Unary op b a)=>Proxy op->b->C4mParser a
+        unary :: (Unary op b a)=>Proxy op->b->C4mIRParser a
         --binary :: (COperator op, BinaryFun op t1 t2 ~ a, FirstClass t1, FirstClass t2)=>Proxy op->t1->t2->m a
         unary operator v=let vproxy=proxyVal v
                              retproxy=unaryProxy operator vproxy in do
@@ -139,9 +155,10 @@ module Typekernel.Transpiler where
                     let cop=coperator operator
                     k<-newIdent
                     let t=ctype retproxy
-                    emit $ t++" "++k++" = "++cop++" "++id++";"
+                    --emit $ t++" "++k++" = "++cop++" "++id++";"
+                    emitIR $ IRUnary (typeToName t, k) cop id
                     return $ wrap retproxy k
-        binary :: (Binary op b c a)=>Proxy op->b->c->C4mParser a
+        binary :: (Binary op b c a)=>Proxy op->b->c->C4mIRParser a
         --binary :: (COperator op, BinaryFun op t1 t2 ~ a, FirstClass t1, FirstClass t2)=>Proxy op->t1->t2->m a
         binary operator vb vc=let vbproxy=proxyVal vb
                                   vcproxy=proxyVal vc
@@ -151,25 +168,27 @@ module Typekernel.Transpiler where
                         let cop=coperator operator
                         k<-newIdent
                         let t=ctype retproxy
-                        emit $ t++" "++k++" = "++idb++" "++cop++" "++idc++";"
+                        --emit $ t++" "++k++" = "++idb++" "++cop++" "++idc++";"
+                        emitIR $ IRBinary (typeToName t, k) cop idb idc
                         return $ wrap retproxy k
 
         --binary :: (COperator op, BinaryFun op t1 t2 ~ a)=>Proxy op->t1->t2->m a
-        defun :: (FirstClass b, FirstClassList a)=>(a->C4mParser b)->C4mParser (Fn a b)
+        defun :: (FirstClass b, FirstClassList a)=>(a->C4mIRParser b)->C4mIRParser (Fn a b)
         defun fn = do
             funname<-newFunc
             namedFunction funname fn
-        invokep :: (FirstClassList a, FirstClass b)=>(Ptr (Fn a b))->a->C4mParser b
+        invokep :: (FirstClassList a, FirstClass b)=>(Ptr (Fn a b))->a->C4mIRParser b
         invokep fn args=do
-            let (aproxy, bproxy)=fnPtrProxyVal fn
-            let rettype=ctype bproxy
-            let (Ptr fnname)=fn
-            k<-newIdent
-            let arglist=listmetadata args
-            let argstr=intercalate ", " arglist
-            emit $ rettype++" "++k++" = (*"++fnname++")("++argstr++");"
-            return $ wrap bproxy k
-        invoke :: (FirstClassList a, FirstClass b)=>(Fn a b)->a->C4mParser b
+            return undefined
+            --let (aproxy, bproxy)=fnPtrProxyVal fn
+            --let rettype=ctype bproxy
+            --let (Ptr fnname)=fn
+            --k<-newIdent
+            --let arglist=listmetadata args
+            --let argstr=intercalate ", " arglist
+            --emit $ rettype++" "++k++" = (*"++fnname++")("++argstr++");"
+            --return $ wrap bproxy k
+        invoke :: (FirstClassList a, FirstClass b)=>(Fn a b)->a->C4mIRParser b
         invoke fn args=do
             let (aproxy, bproxy)=fnProxyVal fn
             let rettype=ctype bproxy
@@ -177,65 +196,82 @@ module Typekernel.Transpiler where
             k<-newIdent
             let arglist=listmetadata args
             let argstr=intercalate ", " arglist
-            emit $ rettype++" "++k++" = "++fnname++"("++argstr++");"
+            let argtypes=fmap typeToName $ listctype aproxy
+            emitIR $ IRInvoke fnname (typeToName rettype, k) arglist
+            --emit $ rettype++" "++k++" = "++fnname++"("++argstr++");"
             return $ wrap bproxy k
 
-        if' :: (FirstClassList a)=>Boolean->C4mParser a->C4mParser a->C4mParser a
+        
+        if' :: (FirstClassList a)=>Boolean->C4mIRParser a->C4mIRParser a->C4mIRParser a
         if' val btrue bfalse=do
             let proxy=proxyMVal btrue
+            scopeTrue<-subScope btrue
+            scopeFalse<-subScope bfalse
             temp<-initList proxy
-            emit $ "if("++(metadata val)++")"
-            emit "{"
-            indented $ do
-                vtrue<-btrue
-                assignList temp vtrue
-            emit "}"
-            emit "else {"
-            indented $ do
-                vfalse<-bfalse
-                assignList temp vfalse
-            emit "}"
+            emitIR $ IRTernary 
+                (zip (fmap typeToName $ listctype $ proxyVal temp) (listmetadata temp))
+                (metadata val)
+                (snd scopeTrue, listmetadata $ fst scopeTrue)
+                (snd scopeFalse, listmetadata $ fst scopeFalse)
             return temp
-        cast :: (Castable a b, FirstClass a, FirstClass b)=>Proxy b->a->C4mParser b
+            --temp<-initList proxy
+            --emit $ "if("++(metadata val)++")"
+            --emit "{"
+            --indented $ do
+            --    vtrue<-btrue
+            --    assignList temp vtrue
+            --emit "}"
+            --emit "else {"
+            --indented $ do
+            --    vfalse<-bfalse
+            --    assignList temp vfalse
+            --emit "}"
+            --return temp
+        cast :: (Castable a b, FirstClass a, FirstClass b)=>Proxy b->a->C4mIRParser b
         cast proxyb a=do
             let proxya=proxyVal a
             let val=metadata a
             id<-newIdent
-            emit $ ctype proxyb ++" "++id++" = ("++ ctype proxyb ++")"++val++";"
+            emitIR $ IRCast (typeToName $ ctype proxyb, id) val
+            --emit $ ctype proxyb ++" "++id++" = ("++ ctype proxyb ++")"++val++";"
             return $ wrap proxyb id
-        defarr :: (KnownNat n)=>Proxy n->C4mParser (Memory n)
+        defarr :: (KnownNat n)=>Proxy n->C4mIRParser (Memory n)
         defarr pn=do
             let arrSize=((7+natToInt pn ) `quot` 8)
-            assureArrType arrSize
+            --assureArrType arrSize
             id<-newArray
-            emit $ "arr_"++(show arrSize)++" "++id++" = {0};"
+            
+            --emit $ "arr_"++(show arrSize)++" "++id++" = {0};"
             idp<-newIdent
-            emit $ "uint64_t* "++idp++" = &("++id++".data[0]);"
+            emitIR $ IRAlloca idp (natToInt pn)
+            --emit $ "uint64_t* "++idp++" = &("++id++".data[0]);"
             return $ Memory (Ptr idp)
 
-        assign :: (KnownNat n)=>Memory n->Memory n->C4mParser ()
+        assign :: (KnownNat n)=>Memory n->Memory n->C4mIRParser ()
         assign to from=do
             let pn=proxyMVal to
             let arrSize=((7+natToInt pn ) `quot` 8)
-            assureArrType arrSize
-            let arrtype="arr_"++(show arrSize)
-            emit $ "*("++arrtype++"*)"++(metadata $ memStart to)++" = *("++arrtype++"*)"++(metadata $ memStart from)++";"
+            emitIR $ IRMemcpy (natToInt pn) (metadata $ memStart to) (metadata $ memStart from)
+            return ()
+            --assureArrType arrSize
+            --let arrtype="arr_"++(show arrSize)
+            --emit $ "*("++arrtype++"*)"++(metadata $ memStart to)++" = *("++arrtype++"*)"++(metadata $ memStart from)++";"
         --readarr :: (Memory n)->Size->m USize
         --writearr :: (Memory n)->Size->USize->m USize
-        deref :: (FirstClass a)=>Ptr a->C4mParser a
+        deref :: (FirstClass a)=>Ptr a->C4mIRParser a
         deref p=do
             let pa=ptrType p
             id<-newIdent
-            emit $ (ctype pa)++" "++id++" = *"++(metadata p)++";"
-            return $ wrap pa id
-        mref :: (FirstClass a)=>Ptr a->a->C4mParser ()
+            emitIR $ IRDeref id (metadata p)
+            --emit $ (ctype pa)++" "++id++" = *"++(metadata p)++";"
+            return $ wrap pa id 
+        mref :: (FirstClass a)=>Ptr a->a->C4mIRParser ()
         mref p a=
-            emit $ "*"++(metadata p)++" = "++""++(metadata a)++";"
-    -- Using transpiler by default.
-    type C=C4mParser
+            emitIR $ IRModifyRef (metadata p) (metadata a)
+            --emit $ "*"++(metadata p)++" = "++""++(metadata a)++";"
 
-    
-   
+
+    type C = C4mIRParser
 
     immInt8 :: Integer->C Int8
     immInt8=imm . fromIntegral
@@ -273,7 +309,7 @@ module Typekernel.Transpiler where
     -- Monads that are compatible with "C" monad.
     class (Monad m)=>MonadC m where
         liftC :: C a->m a
-    instance MonadC C4mParser where liftC = id
+    instance MonadC C4mIRParser where liftC = id
 
     instance (MonadC m, Monad m)=>MonadIO m where
-        liftIO = liftC . C4mParser . lift
+        liftIO = liftC . C4mIRParser . lift
