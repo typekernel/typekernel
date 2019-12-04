@@ -262,12 +262,12 @@ module Typekernel.Transpiler where
         deref p=do
             let pa=ptrType p
             id<-newIdent
-            emitIR $ IRDeref id (metadata p)
+            emitIR $ IRDeref (typeToName $ ctype $ proxyVal $ p, id) (metadata p)
             --emit $ (ctype pa)++" "++id++" = *"++(metadata p)++";"
             return $ wrap pa id 
         mref :: (FirstClass a)=>Ptr a->a->C4mIRParser ()
         mref p a=
-            emitIR $ IRModifyRef (metadata p) (metadata a)
+            emitIR $ IRModifyRef (metadata p) (typeToName $ ctype $ proxyVal $ a, metadata a)
             --emit $ "*"++(metadata p)++" = "++""++(metadata a)++";"
 
 

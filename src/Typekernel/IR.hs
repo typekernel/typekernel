@@ -11,17 +11,20 @@ module Typekernel.IR where
     data IRLiteral = IInteger Integer deriving (Generic, Show)
     
     data IRStmt =
+        -- Extern a C function.
         IRExternFun {
             iName :: String,
             iReturnType :: IRDatatype,
             iArgumentType :: [IRDatatype]
         } |
+        -- Define a function.
         IRFun {
             iName :: String,
             iReturnField :: (IRDatatype, String),
             iArgumentField :: [(IRDatatype, String)],
             iFuncBody :: [IRStmt]
         } |
+        -- Introduce an immediate.
         IRImm {
             iUName :: (IRDatatype, String),
             iLiteral :: String
@@ -45,6 +48,7 @@ module Typekernel.IR where
                 ("LShift", "<<"),
                 ("RShift", ">>")]
         -}
+        -- Binary operation.
         IRBinary {
             iUName :: (IRDatatype, String),
             iOperator :: String,
@@ -56,16 +60,19 @@ module Typekernel.IR where
                              ("Neg", "-"),
                              ("Not", "!"),  
         -}
+        -- Unary operation.
         IRUnary {
             iUName :: (IRDatatype, String),
             iOperator :: String,
             iOperand ::  String
         } |
+        -- Invoke a function
         IRInvoke {
             iInvokedFun :: String,
             iUName :: (IRDatatype, String),
             iArguments :: [String]
         } |
+        -- Ternary statement. More like Rust.
         IRTernary {
             iLName :: [(IRDatatype, String)],
             iTOperand1 :: String,
@@ -74,6 +81,7 @@ module Typekernel.IR where
             -- Pairs of statements and returned names.
             iTOperand3 :: ([IRStmt], [String])
         } |
+        -- Force cast.
         IRCast {
             iUName :: (IRDatatype, String),
             iOperand :: String
@@ -90,19 +98,24 @@ module Typekernel.IR where
             iName ::String,
             iMemSize :: Int
         } |
+        -- Memcpy with fixed size. This should be seen as a struct copy in C.
         IRMemcpy {
             iMemSize :: Int,
             iDest :: String,
             iSource :: String
         } |
+        -- Dereferencing a UInt64.
         IRDeref {
-            iDest :: String,
+            iDestR :: (IRDatatype, String),
             iSource :: String
         } |
+        -- Referencing UInt64.
         IRModifyRef {
-            iDest :: String,
-            iSource :: String
+            iDest ::  String,
+            iSourceR :: (IRDatatype,String)
         } |
+        -- Introducing a string literal.
+        -- Maybe this is not the best option?
         IRStringLiteral {
             iName :: String,
             iStringLiteral :: String
