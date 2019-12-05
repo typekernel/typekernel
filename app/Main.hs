@@ -50,6 +50,44 @@ expr=do
         return zero)
     return ()
         --emit $ "printf(\"The sum is %d\\n\"," ++ (metadata ret) ++ ");"
+
+exprEmpty :: C ()
+exprEmpty = do
+    namedFunction "main" (\(x::Void)->do
+        a<-immInt32 100 
+        b<-immInt32 200
+        binary opAdd a b)
+    return ()
+
+cstdio :: C (Fn Void UInt8, Fn (UInt8, Void) UInt64)
+cstdio = do
+    onceC "stdio.h" $ emitCDecl ["#include <stdio.h>"]
+    onceC "readC" $ emitCDecl ["uint8_t readC(){return getchar();}"]
+    onceC "writeC" $ emitCDecl ["uint64_t writeC(uint8_t chr){putchar(chr);}"]
+    readC<-externFunction "readC" (Proxy :: Proxy Void) (Proxy :: Proxy UInt8) 
+    writeC<-externFunction "writeC" (Proxy :: Proxy (UInt8, Void)) (Proxy :: Proxy UInt64)
+    return (readC, writeC)
+exprStdio :: C ()
+exprStdio = do
+    (readC, writeC)<-cstdio
+    namedFunction "main" (\(x::Void)->do
+        chr<-invoke readC Void
+        one<-immUInt8 1
+        schr<-binary opAdd chr one
+        invoke writeC (schr, Void)
+        immInt32 0)
+    return ()
+exprFun :: C ()
+exprFun = do
+    plusOne<-defun (\(x::Int32, _::Void)->do
+        one<-immInt32 1
+        binary opAdd x one
+        )
+    namedFunction "main" (\(x::Void)->do
+        a<-immInt32 100 
+        invoke plusOne (a, Void))
+    return ()
+    
 generateCode :: String->C ()->IO ()
 generateCode name ast=do
     putStrLn $ "Generating "++name
@@ -59,6 +97,9 @@ generateCode name ast=do
 
 snippets = Map.fromList [
     ("expr", expr),
+    ("exprEmpty", exprEmpty),
+    ("exprStdio", exprStdio),
+    ("exprFun", exprFun),
     ("bootloader", Typekernel.Loader.Main.main)
     ]
 
