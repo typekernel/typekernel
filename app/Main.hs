@@ -18,6 +18,8 @@ import System.Exit
 import qualified Data.Map as Map
 import System.Console.GetOpt
 import Data.List
+import Typekernel.ProductType
+
 expr :: C ()
 expr=do
     onceC "echo_test" $ emitCDecl ["uint64_t echo_test(int32_t val){printf(\"The sum is %d\\n\", val);}"]
@@ -88,6 +90,46 @@ exprFun = do
         invoke plusOne (a, Void))
     return ()
     
+exprTernary :: C ()
+exprTernary = do
+    mult_hundred<-imm True
+    (a, (b, (c, _)))<-if' mult_hundred 
+        (do
+            a<-immUInt64 100
+            b<-immUInt64 200
+            c<-immUInt64 300
+            return (a, (b, (c, Void))))
+        (do
+            a<-immUInt64 1
+            b<-immUInt64 2
+            c<-immUInt64 3
+            return (a, (b, (c, Void))))
+            
+    return ()
+
+data Triplet' a
+type Triplet a = Typedef (Triplet' a) (Product a (Product a a))
+type TripletUInt8=Triplet (Basic UInt8)
+exprMemory :: C ()
+exprMemory = do
+    (readC, writeC)<-cstdio
+    runRAII $ do
+        zero<-liftC $ immUInt8 0
+        triplet<-construct (ctorProd (ctorBasic zero) (ctorProd (ctorBasic zero) (ctorBasic zero)))
+        first_elem<-liftC $ fstS $ scopedValue triplet
+        second_elem<-liftC $ (flip (>>=) fstS) $ sndS $ scopedValue triplet
+        third_elem<-liftC $ (flip (>>=) sndS) $ sndS $ scopedValue triplet
+        value<-liftC $ immUInt8 48
+        one<-liftC $ immUInt8 1
+        value<-liftC $ binary opAdd value one
+        liftC $ mset basic first_elem value
+        value<-liftC $ binary opAdd value one
+        liftC $ mset basic second_elem value
+        value<-liftC $ binary opAdd value one
+        liftC $ mset basic third_elem value
+        return ()
+    return ()
+    
 generateCode :: String->C ()->IO ()
 generateCode name ast=do
     putStrLn $ "Generating "++name
@@ -100,6 +142,8 @@ snippets = Map.fromList [
     ("exprEmpty", exprEmpty),
     ("exprStdio", exprStdio),
     ("exprFun", exprFun),
+    ("exprTernary", exprTernary),
+    ("exprMemory", exprMemory),
     ("bootloader", Typekernel.Loader.Main.main)
     ]
 

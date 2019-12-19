@@ -171,6 +171,7 @@ module Typekernel.Structure where
 
     type family Constructor m a where
         Constructor m a = Memory (SizeOf a)->m a
+        
     {-
     reconstruct :: (Lifetime a env, Structure m a, MonadC env)=>Constructor env a->a->env a
     reconstruct ctor x = do

@@ -1,11 +1,12 @@
 {-# LANGUAGE TemplateHaskell, DataKinds, KindSignatures, FlexibleContexts #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
 module Typekernel.Memory where
     import Typekernel.Nat
     import Typekernel.C4mAST
     import Typekernel.Transpiler
     import Data.Proxy
     import Typekernel.MLens
+    import Typekernel.IR
 
     roundUp :: (KnownNat n)=>Proxy (n::Nat)->Int
     roundUp n=(((natToInt n)+7) `quot` 8)*8
@@ -18,21 +19,22 @@ module Typekernel.Memory where
     -- We force structure to generate aligned memory reference.
     -- Reference to unaligned memory is unallowed.
 
-    submemory :: (KnownNat o, PeanoLT (NMul o N8) n True, PeanoLT (NAdd (NMul o N8) m) (S n) True)=>(Proxy o, Proxy m)->Memory n->C (Memory m)
+    submemory :: (KnownNat o, KnownNat m, PeanoLT (NMul o N8) n True, PeanoLT (NAdd (NMul o N8) m) (S n) True)=>(Proxy o, Proxy m)->Memory n->C (Memory m)
     submemory=unsafeSubmemory
-    unsafeSubmemory :: (KnownNat (o::Nat))=>(Proxy o, Proxy (m::Nat))->Memory n->C (Memory m)
+    unsafeSubmemory :: (KnownNat m)=>(KnownNat (o::Nat))=>(Proxy o, Proxy (m::Nat))->Memory n->C (Memory m)
     unsafeSubmemory p mem=do
         let (po, pm)=p
         offset<-immUSize $ fromIntegral $ (natToInt po)*8
         unsafeSubmemory' (offset, pm) mem
-    unsafeSubmemory' :: (USize, Proxy (m::Nat))->Memory n->C (Memory m)
+    unsafeSubmemory' :: (KnownNat m)=>(USize, Proxy (m::Nat))->Memory n->C (Memory m)
     unsafeSubmemory' p mem=do
         let ptr=memStart mem
         let (po, pm)=p
         byteptr<-cast (Proxy :: Proxy USize) ptr
         let offset=po
         newptr<-binary opAdd byteptr offset
-        Memory <$> cast (Proxy::Proxy (Ptr USize)) newptr
+        newptr<-cast (Proxy::Proxy (Ptr USize)) newptr
+        hintedMemory pm newptr
     {-
     unsafeByteC :: (KnownNat m)=>Proxy (m::Nat)->MLens C (Memory n) UInt8
     unsafeHalfC :: (KnownNat m, PeanoMod2 m Z)=>Proxy (m::Nat)->MLens C (Memory n) UInt16
@@ -146,3 +148,12 @@ module Typekernel.Memory where
         PeanoMod8 m2 'Z, MonadC m1) =>
         Proxy m2 -> Memory n1 -> m1 (Memory n2)
     remoteMemory pn mem=do {addr<-mget (dword pn) mem; ptr<-cast (Proxy :: Proxy (Ptr UInt64)) addr; return $ Memory ptr}
+
+    hintMemory :: (MonadC m, KnownNat n)=>(Memory n)->m ()
+    hintMemory mem = liftC $ emitIR $ IRMemoryHint ( metadata $ memStart mem) (natToInt $ ((\x->Proxy) :: t (a::Nat)->Proxy a) mem)
+
+    hintedMemory :: (MonadC m, KnownNat n)=>Proxy n->Ptr USize->m (Memory n)
+    hintedMemory (proxy :: Proxy n) ptr = do
+        let mem=Memory ptr :: Memory n
+        hintMemory mem
+        return mem
