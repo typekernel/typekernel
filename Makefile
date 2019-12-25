@@ -1,6 +1,14 @@
 all: boot kernel
-.PHONY: boot kernel img qemu
+.PHONY: boot kernel img qemu tirr
 boot: target/typeboot.efi
+
+TIRR = tirr/tirr/bin/Release/netcoreapp3.0/tirr
+
+tirr: $(TIRR)
+
+$(TIRR):
+	cd tirr; dotnet build -p:Configuration=Release
+
 
 target/typeboot.efi: target/bootloader.c
 	gcc target/bootloader.c             \
@@ -37,10 +45,17 @@ target/typeboot.efi: target/bootloader.c
           --target=efi-app-x86_64 \
           target/typeboot.so                 \
           target/typeboot.efi
-target/bootloader.c:
-	stack run bootloader target/bootloader.c
-kernel:
-	echo "Kernel not implemented yet."
+target/bootloader.c: target/bootloader.tirr
+	$(TIRR) <target/bootloader.tirr > target/bootloader.c
+target/bootloader.tirr:
+	stack run bootloader target/bootloader.tirr
+target/kernel.c: target/kernel.tirr
+	$(TIRR) <target/kernel.tirr > target/kernel.c
+target/kernel.tirr:
+	stack run kernel target/kernel.tirr
+
+
+
 img: target/typekernel.img
 target/typekernel.img: boot
 	dd if=/dev/zero of=target/typekernel.img bs=512 count=93750
@@ -58,3 +73,4 @@ qemu:
 		-drive format=raw,file=target/typekernel.img,if=ide \
 		-net none -m 1G \
             -serial mon:stdio -d int
+

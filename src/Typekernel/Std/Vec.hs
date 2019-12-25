@@ -1,5 +1,5 @@
 {-# LANGUAGE DataKinds, FlexibleInstances, FunctionalDependencies, UndecidableInstances, GeneralizedNewtypeDeriving, KindSignatures, TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables #-}
 module Typekernel.Std.Vec where
     import Typekernel.Structure
     import Typekernel.ProductType
@@ -15,6 +15,7 @@ module Typekernel.Std.Vec where
     import Typekernel.Memory
     import Typekernel.Constant
     import Typekernel.Vec
+    import qualified Data.Vector as V
     data Buffer'
 
     -- Runtime buffer.
@@ -66,7 +67,7 @@ module Typekernel.Std.Vec where
     
 
     -- Fixed-sized array.
-
+    {-
     data Array' (s::Nat) a
 
     type family Array (s::Nat) a where
@@ -112,9 +113,10 @@ module Typekernel.Std.Vec where
         unsafeCtorArray _ (ctor:ctors)= ctorNewtype ctor
     instance (MonadC m, KnownNat n, Structure n a, SizeOf a ~ n, ArrayCtor m arr a s n,
              Structure n0 arr, SizeOf arr ~ n0, 
-             NMul s n ~ n0, NMul ('S s) n ~ NAdd (NUpRound8 n) (NUpRound8 n0),
+             NAdd s 1 ~ ss, 
+             NMul s n ~ n0, NMul ss n ~ NAdd (NUpRound8 n) (NUpRound8 n0),
              KnownNat n0, (KnownNat (NAdd (NUpRound8 n) (NUpRound8 n0))))
-             =>ArrayCtor m (Typedef (Array' (S s) a) (Product a arr)) a (S s) n where
+             =>ArrayCtor m (Typedef (Array' ss a) (Product a arr)) a ss n where
         unsafeCtorArray pa (ctor:ctors) =
             let ctorleft=ctor
                 ctorright=unsafeCtorArray (rightArr pa) ctors
@@ -123,7 +125,55 @@ module Typekernel.Std.Vec where
             in ctorn
     ctorArray :: (ArrayCtor m arr a (s::Nat) (n::Nat), Array s a ~ arr)=>Vec (Memory n->m a) s->Memory (NMul s n)->m arr
     ctorArray vec = unsafeCtorArray Proxy (toListV vec)
+    -}
 
+
+    data StaticArray (s::Nat) a = StaticArray {staticArrayToMem :: Memory (NMul s (SizeOf a))}
+    
+
+    instance (Structure n a, SizeOf a ~ n, NMul s n ~ sn)=>Structure sn (StaticArray s a) where
+        --restore :: Proxy (StaticArray s a)->(Memory sn)->C (StaticArray s a)
+        restore _ memory = return $ StaticArray memory
+    
+    (!!:) :: (MonadC m, Structure n a, SizeOf a ~ n, NMul s n ~ sn, PeanoLT (t::Nat) s True, KnownNat s, KnownNat n, KnownNat t)=>Proxy t->(StaticArray s a)->m a
+    (!!:) (p :: Proxy t) (arr :: StaticArray s a)= do
+        let memory=staticArrayToMem arr :: Memory (NMul s (SizeOf a))
+        let offset_obj=natToInt p
+        let size_obj=natToInt (Proxy :: Proxy (SizeOf a))
+        offset_total<-liftC $ immUInt64 $ fromIntegral (size_obj*offset_obj)
+        slice<-liftC $ unsafeSubmemory' (offset_total, (Proxy :: Proxy (SizeOf a))) memory
+        liftC $ restore Proxy slice
+
+    instance (Lifetime a m, MonadC m, Structure n a, SizeOf a ~ n, NMul s n ~ sn, KnownNat s, KnownNat n, Structure n a)=>Lifetime (StaticArray s a) m where
+        finalize (arr :: StaticArray s a) = do
+            let element_count=natToInt (Proxy :: Proxy s)
+            sequence_ [(do
+                let memory=staticArrayToMem arr :: Memory (NMul s (SizeOf a))
+                let offset_obj=x
+                let size_obj=natToInt (Proxy :: Proxy (SizeOf a))
+                offset_total<-liftC $ immUInt64 $ fromIntegral (size_obj*offset_obj)
+                slice<-liftC $ unsafeSubmemory' (offset_total, (Proxy :: Proxy (SizeOf a))) memory
+                subobj<-liftC $ restore (Proxy :: Proxy a) slice
+                finalize subobj
+                )|x<-[0..element_count-1]]
+
+    ctorArray :: (MonadC m, Structure n a, SizeOf a ~ n, NMul s n ~ sn, KnownNat s, KnownNat n)=>
+                    Vec (Memory n->m a) s->Memory sn->m (StaticArray s a)
+    ctorArray (vec :: Vec (Memory n->m a) s) (memory :: Memory sn) = do
+        let element_count = natToInt (Proxy :: Proxy s)
+        sequence_ [(do
+            let offset_obj=x
+            let size_obj=natToInt (Proxy :: Proxy (SizeOf a))
+            offset_total<-liftC $ immUInt64 $ fromIntegral (size_obj*offset_obj)
+            slice<-liftC $ unsafeSubmemory' (offset_total, (Proxy :: Proxy (SizeOf a))) memory
+            let ctor=(V.!) (getVector vec) offset_obj
+            ctor slice
+            )|x<-[0..element_count-1]]
+        return $ StaticArray memory
+
+    type instance (SizeOf (StaticArray s a))=NMul s (SizeOf a)
 
     data BasicMem' (n::Nat)
-    type BasicMem (n::Nat)=Typedef (BasicMem' n) (Array (NCeil8 (NUpRound8 n)) (Basic UInt64))
+    type BasicMem (n::Nat)=Typedef (BasicMem' n) (StaticArray (NCeil8 (NUpRound8 n)) (Basic UInt64))
+
+    

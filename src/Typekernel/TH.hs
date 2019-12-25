@@ -11,10 +11,15 @@ module Typekernel.TH where
     promote :: a->Q a
     promote=return
 
-    generateNat :: Int->Name->Name->[Dec]
-    generateNat maxn z s=
+    generateLegacyNat :: Int->Name->Name->[Dec]
+    generateLegacyNat maxn z s=
                 let names=fmap mkName $ ["N"++(show x) | x<-[0..maxn]]
                     src=(PromotedT z):(fmap (\name->AppT (PromotedT s) (ConT name)) names)
+                in zipWith (\a b->TySynD a [] b) names src
+    generateNat :: Int->[Dec]
+    generateNat maxn=
+                let names=fmap mkName $ ["N"++(show x) | x<-[0..maxn]]
+                    src=[LitT (NumTyLit x) | x<-[0..(fromIntegral maxn)]]
                 in zipWith (\a b->TySynD a [] b) names src
 
     

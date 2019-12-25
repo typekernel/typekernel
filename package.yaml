@@ -30,6 +30,8 @@ dependencies:
 - conduit
 - aeson
 - bytestring
+- vector
+- raw-strings-qq
 library:
   source-dirs: src
 

@@ -1,50 +1,56 @@
-{-# LANGUAGE DataKinds, KindSignatures, GADTs #-}
+{-# LANGUAGE DataKinds, KindSignatures, GADTs, FlexibleInstances, UndecidableInstances #-}
 module Typekernel.Vec where
     import Typekernel.Nat
     import Data.Proxy
+    import qualified Data.Vector as V
+    
+    data Vec a (n::Nat) = UnsafeMkVec {getVector :: V.Vector a}
+    {- 
     data Vec a (n::Nat) where 
         Nil :: Vec a Z
         (:-) :: a->Vec a n -> Vec a (S n)
 
     infixr :-
+    -}
 
+    nilV :: Vec a 0
+    nilV = UnsafeMkVec $ V.empty
+    singletonV :: a->Vec a 1
+    singletonV = UnsafeMkVec . V.singleton
+    (-:) :: a->Vec a n->Vec a (NAdd 1 n)
+    (-:) =concatV . singletonV
 
+    infixr -:
     instance (Show a)=>Show (Vec a n) where
         show = show . toListV
 
+
     class VectorNat (n::Nat) where
-        vectorNat :: Vec Int n
-    instance VectorNat Z where
-        vectorNat =Nil
-    instance (VectorNat n)=>VectorNat (S n) where
-        vectorNat =0:-(mapV (+1) vectorNat)
+        vectorNat' :: Proxy n->Vec Int n
+    instance (KnownNat n)=>VectorNat n where
+        vectorNat' p= UnsafeMkVec $ V.fromList [0..(natToInt p)-1]
     
-    vectorNat' :: (VectorNat n)=>Proxy n->Vec Int n
-    vectorNat' _=vectorNat
+    
+    vectorNat :: (VectorNat n)=>Vec Int n
+    vectorNat =vectorNat' Proxy
+    
     mapV :: (a -> b) -> Vec a n -> Vec b n
 
-    mapV _ Nil=Nil
-    mapV f (x:-xs)=(f x):-(mapV f xs)
+    mapV f vec= UnsafeMkVec $ fmap f $ getVector vec
 
 
     toListV :: Vec a n->[a]
 
-    toListV Nil=[]
-    toListV (x:-xs)=x:(toListV xs)
+    toListV = V.toList . getVector
 
     sizeV :: Vec a n->Proxy n
     sizeV _=Proxy
 
 
     concatV :: Vec a m->Vec a n->Vec a (NAdd m n)
-    concatV Nil xs = xs
-    concatV (x:-xs) ys = x:-(concatV xs ys)
+    concatV va vb= UnsafeMkVec $ (V.++) (getVector va) (getVector vb)
 
     (++:) = concatV
     
-    mapMV :: (Monad m)=>(a->m b)->Vec a n->m (Vec b n)
-    mapMV f Nil=return Nil
-    mapMV f (x:-xs) = do
-        mx<-f x
-        mxs<-mapMV f xs
-        return $ mx:-mxs
+    mapMV :: (Monad m)=>(a->m b)->Vec a (n::Nat)->m (Vec b n)
+    mapMV f vec=fmap UnsafeMkVec $ V.mapM f $ getVector vec

@@ -1,5 +1,6 @@
 {-# LANGUAGE TemplateHaskell, DataKinds, KindSignatures, FlexibleContexts #-}
-{-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes, TypeOperators, ScopedTypeVariables #-}
+
 module Typekernel.Memory where
     import Typekernel.Nat
     import Typekernel.C4mAST
@@ -50,9 +51,9 @@ module Typekernel.Memory where
     unsafeWord :: (KnownNat m, PeanoMod4 m Z, MonadC env)=>Proxy (m::Nat)->MLens env (Memory n) UInt32
     unsafeDword :: (KnownNat m, PeanoMod8 m Z, MonadC env)=>Proxy (m::Nat)->MLens env (Memory n) UInt64
     byte :: (KnownNat m, PeanoLT m n True, MonadC env)=>Proxy (m::Nat)->MLens env (Memory n) UInt8
-    half :: (KnownNat m, PeanoLT (S m) n True, PeanoMod2 m Z, MonadC env)=>Proxy (m::Nat)->MLens env (Memory n) UInt16
-    word :: (KnownNat m, PeanoLT  (S (S (S m))) n True, PeanoMod4 m Z, MonadC env)=>Proxy (m::Nat)->MLens env (Memory n) UInt32
-    dword :: (KnownNat m, PeanoLT (S (S (S (S (S (S (S m))))))) n True, PeanoMod8 m Z, MonadC env)=>
+    half :: (KnownNat m, PeanoLT (NAdd m 1) n True, PeanoMod2 m Z, MonadC env)=>Proxy (m::Nat)->MLens env (Memory n) UInt16
+    word :: (KnownNat m, PeanoLT  (NAdd m 3) n True, PeanoMod4 m Z, MonadC env)=>Proxy (m::Nat)->MLens env (Memory n) UInt32
+    dword :: (KnownNat m, PeanoLT (NAdd m 7) n True, PeanoMod8 m Z, MonadC env)=>
         Proxy (m::Nat)->MLens env (Memory n) UInt64
     byte=unsafeByte
     half=unsafeHalf
@@ -144,9 +145,11 @@ module Typekernel.Memory where
                     return $ untup t
                     
     remoteMemory :: (C4mAST m1, KnownNat m2,
-        PeanoLT ('S ('S ('S ('S ('S ('S ('S m2))))))) n1 'True,
-        PeanoMod8 m2 'Z, MonadC m1) =>
+        PeanoLT (NAdd m2 7) n1 'True,
+        PeanoMod8 m2 0, MonadC m1) =>
         Proxy m2 -> Memory n1 -> m1 (Memory n2)
+
+
     remoteMemory pn mem=do {addr<-mget (dword pn) mem; ptr<-cast (Proxy :: Proxy (Ptr UInt64)) addr; return $ Memory ptr}
 
     hintMemory :: (MonadC m, KnownNat n)=>(Memory n)->m ()

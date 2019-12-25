@@ -37,19 +37,19 @@ module Typekernel.Constant where
     
 
     singleByte :: Word8->Vec Word8 N1
-    singleByte w = w :-Nil
+    singleByte w = w -: nilV
 
     singleHalf :: Word16->Vec Word16 N2
-    singleHalf h = (fromIntegral $ (h .&. 0xff)) :- (fromIntegral $ ((h `shiftR` 8) .&. 0xff)) :- Nil
+    singleHalf h = (fromIntegral $ (h .&. 0xff)) -: (fromIntegral $ ((h `shiftR` 8) .&. 0xff)) -: nilV
 
     singleWord :: Word32->Vec Word32 N4
-    singleWord h = (fromIntegral $ (h .&. 0xff)) :- (fromIntegral $ ((h `shiftR` 8) .&. 0xff)) 
-                    :- (fromIntegral $ ((h `shiftR` 16) .&. 0xff)) :- (fromIntegral $ ((h `shiftR` 24) .&. 0xff)) :- Nil
+    singleWord h = (fromIntegral $ (h .&. 0xff)) -: (fromIntegral $ ((h `shiftR` 8) .&. 0xff)) 
+                    -: (fromIntegral $ ((h `shiftR` 16) .&. 0xff)) -: (fromIntegral $ ((h `shiftR` 24) .&. 0xff)) -: nilV
 
     singleDword :: Word64->Vec Word64 N8
-    singleDword h = (fromIntegral $ (h .&. 0xff)) :- (fromIntegral $ ((h `shiftR` 8) .&. 0xff)) 
-                    :- (fromIntegral $ ((h `shiftR` 16) .&. 0xff)) :- (fromIntegral $ ((h `shiftR` 24) .&. 0xff))
-                    :- (fromIntegral $ ((h `shiftR` 32) .&. 0xff)) :- (fromIntegral $ ((h `shiftR` 40) .&. 0xff))
-                    :- (fromIntegral $ ((h `shiftR` 48) .&. 0xff)) :- (fromIntegral $ ((h `shiftR` 56) .&. 0xff)) :- Nil
+    singleDword h = (fromIntegral $ (h .&. 0xff)) -: (fromIntegral $ ((h `shiftR` 8) .&. 0xff)) 
+                    -: (fromIntegral $ ((h `shiftR` 16) .&. 0xff)) -: (fromIntegral $ ((h `shiftR` 24) .&. 0xff))
+                    -: (fromIntegral $ ((h `shiftR` 32) .&. 0xff)) -: (fromIntegral $ ((h `shiftR` 40) .&. 0xff))
+                    -: (fromIntegral $ ((h `shiftR` 48) .&. 0xff)) -: (fromIntegral $ ((h `shiftR` 56) .&. 0xff)) -: nilV
 
     

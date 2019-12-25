@@ -12,6 +12,7 @@ import Typekernel.RAII
 import Typekernel.Structure
 import Typekernel.MLens
 import qualified Typekernel.Loader.Main
+import qualified Typekernel.Kernel.Main
 import System.IO
 import System.Environment
 import System.Exit
@@ -144,7 +145,8 @@ snippets = Map.fromList [
     ("exprFun", exprFun),
     ("exprTernary", exprTernary),
     ("exprMemory", exprMemory),
-    ("bootloader", Typekernel.Loader.Main.main)
+    ("bootloader", Typekernel.Loader.Main.main),
+    ("kernel", Typekernel.Kernel.Main.main)
     ]
 
 exit    = exitWith ExitSuccess
@@ -160,7 +162,7 @@ main = do
     putStrLn "********************************\nTypekernel Code Generator\n********************************"
     args<-getArgs
     case args of
-        [code]->generate code (code++".c")
+        [code]->generate code (code++".tirr")
         [code, output]->generate code output
         _ ->  putStrLn $ "Programs: "++(intercalate ", " $ Map.keys snippets)
     --generateCode "expr" expr

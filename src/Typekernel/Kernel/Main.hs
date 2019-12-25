@@ -1,6 +1,5 @@
-{-# LANGUAGE QuasiQuotes #-}
-module Typekernel.Loader.Main where
-    import Typekernel.Loader.UEFI
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
+module Typekernel.Kernel.Main where
     import Typekernel.Transpiler
     import Typekernel.Std.StringLiteral
     import Typekernel.Std.Log
@@ -12,6 +11,9 @@ module Typekernel.Loader.Main where
     import Data.Proxy
     import Typekernel.Nat
     import Typekernel.Vec
+    import Text.RawString.QQ
+    import Typekernel.Bound
+    {-
     app :: UEFI ()
     app =do
         lit<-stringL "Warm welcome from Typekernel Typeboot!\n"
@@ -44,5 +46,31 @@ module Typekernel.Loader.Main where
         --liftC $ emit "asm volatile(\"cli;\");"
 
         return ()
+    -}
+
+    kernel_hardcode :: String
+    kernel_hardcode = [r|
+        usize_t kentry();
+        uint8_t gdt_page[4096];
+        uint8_t idt_page[4096];
+        void _kentry(){
+            kentry();
+        }
+    |]
+    kernel :: C()->C ()
+    kernel fn = do
+        onceC "kernel" $ emitCDecl [kernel_hardcode]
+        --namedFunction :: (FirstClass b, FirstClassList a, MonadC m)=>String->(a->m b)->m (Fn a b)
+        kmain<-namedFunction "kmain" (\(_ :: Void)->do
+                fn
+                immUSize 0)
+        kentry<-namedFunction "kentry" (\(_ :: Void)->do
+            invoke kmain Void
+            immUSize 0)
+                
+        return ()
+    
     main :: C ()
-    main=uefiMain app
+    main=kernel $ do
+        foreverLoop $ return () -- infiloop
+        return ()

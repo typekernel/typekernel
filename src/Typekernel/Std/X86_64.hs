@@ -1,4 +1,4 @@
-{-# LANGUAGE DataKinds, PolyKinds, NumericUnderscores, ScopedTypeVariables, FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE DataKinds, PolyKinds, NumericUnderscores, ScopedTypeVariables, FlexibleContexts, TypeFamilies, TypeOperators #-}
 module Typekernel.Std.X86_64 where
     import Typekernel.Structure
     import Typekernel.ProductType
@@ -13,6 +13,7 @@ module Typekernel.Std.X86_64 where
     import Typekernel.Std.Box
     import Data.Bits
     import Data.Proxy
+
 
     import Typekernel.Vec
 
@@ -37,20 +38,20 @@ module Typekernel.Std.X86_64 where
     data GDTTable' (s::Nat)
 
     -- The first of which is empty
-    type GDTTable (s::Nat) = Typedef (GDTTable' s) (Array (S s) GDTItem)
+    type GDTTable (s::Nat) = Typedef (GDTTable' s) (StaticArray (NAdd s 1) GDTItem)
 
     -- Given tss value, yield ctor.
     -- Well the signature become unreadable...
     tssToGDT::(MonadC m)=>UInt64->Constructor m (GDTTable N7)
     tssToGDT tss mem=do
-        gdtimm<-mapMV (liftC . immUInt64 . fromIntegral) (0:-kcode:-ucode:-kdata:-udata:-ucode32:-udata32:-Nil)
-        let initializer=(mapV (\(ui::UInt64)->liftC . (ctorNewtype $ ctorBasic ui)) (gdtimm ++: (tss :- Nil))) 
+        gdtimm<-mapMV (liftC . immUInt64 . fromIntegral) (0-:kcode-:ucode-:kdata-:udata-:ucode32-:udata32-:nilV)
+        let initializer=(mapV (\(ui::UInt64)->liftC . (ctorNewtype $ ctorBasic ui)) (gdtimm ++: (tss -: nilV))) 
         ctorNewtype (ctorArray initializer) mem
 
     data IDTItem'
     type IDTItem = Typedef IDTItem' (Product (Basic UInt64) (Basic UInt64))
     data IDTTable'
-    type IDTTable = Typedef IDTTable' (Array N7 IDTItem)
+    type IDTTable = Typedef IDTTable' (StaticArray N256 IDTItem)
 
     emptyIDTItem :: (MonadC m)=>Constructor m IDTItem
     emptyIDTItem mem = liftC $ ctorNewtype (ctorProd zeroBasic zeroBasic) mem

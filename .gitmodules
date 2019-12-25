@@ -1,0 +1,3 @@
+[submodule "tirr"]
+	path = tirr
+	url = https://github.com/GeminiLab/tirr

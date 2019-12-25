@@ -1,6 +1,6 @@
 {-# LANGUAGE FunctionalDependencies, DataKinds, FlexibleInstances, GeneralizedNewtypeDeriving, TypeFamilies, GADTs, FlexibleContexts, RankNTypes, UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell, NoMonomorphismRestriction, AllowAmbiguousTypes, ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell, NoMonomorphismRestriction, AllowAmbiguousTypes, ScopedTypeVariables, TypeOperators #-}
 module Typekernel.SumType where
     import Typekernel.Structure
     import Typekernel.Nat
@@ -32,7 +32,7 @@ module Typekernel.SumType where
     instance (KnownNat m, Structure m a)=>SumType a () m Z where
         data Sum' a ()=Sum' {sumMem :: Memory (SizeOf (Sum' a ()))}
         --matchS fa fb = do
-    instance (KnownNat m, Structure m c, KnownNat ms, SumType a b ms idx)=>SumType c (Sum' a b) m (S idx) where
+    instance (KnownNat m, Structure m c, KnownNat ms, SumType a b ms idx, NAdd idx 1~sidx)=>SumType c (Sum' a b) m (sidx) where
         data Sum' c (Sum' a b)=Sum'' {sumMem2 :: Memory (SizeOf (Sum' c (Sum' a b)))}
         --matchS fa fb = do
 

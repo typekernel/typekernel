@@ -81,3 +81,12 @@ module Typekernel.Bound where
         shortcircuit<-wrapSFn $ Fn fname
         let partial=invokeS shortcircuit
         defunSNamed fname (fn partial)
+        
+    foreverLoop' :: (MonadC m)=>((forall s. RAII s m ()))->m (SFn m Void USize)
+    foreverLoop' fn = recursion $ (\rc _->fn >> (lift $ rc Void))
+
+    foreverLoop :: (MonadC m)=>(forall s. RAII s m ())->m ()
+    foreverLoop f = do
+        sfn<-foreverLoop' f
+        invokeS sfn Void
+        return ()

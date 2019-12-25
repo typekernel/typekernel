@@ -1,125 +1,91 @@
 {-# LANGUAGE TemplateHaskell, DataKinds, PolyKinds, ScopedTypeVariables #-}
 {-# LANGUAGE FunctionalDependencies, FlexibleInstances, UndecidableInstances #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies, TypeOperators, TypeInType, ConstraintKinds #-}
 module Typekernel.Nat where
     import Typekernel.TH
     import Data.Proxy
+    import qualified GHC.TypeLits as N
 
-    data Nat=Z | S Nat
+    type KnownNat=N.KnownNat
+    -- Migrate to fast GHC natural number.
+    type Nat=N.Nat
+    --data Nat=Z | S Nat
+    $(return $ generateNat 4096)
+
+    type Z=0
+    type family S (x::Nat) :: Nat where
+        S x = (N.+) x 1
+    --class KnownNat n where
+    --    natToInt :: Proxy n->Int
+    --instance (N.KnownNat n)=>KnownNat n where
+    --    natToInt =fromIntegral . N.natVal
     
-    -- may need -freduction-depth=0 to use deeper depth.
-    $(return $ generateNat 1024 'Z 'S)
-    
-    
-    
-    class KnownNat n where
-        natToInt :: Proxy n->Int
-    instance KnownNat Z where
-        natToInt _=0
-    instance KnownNat n=>KnownNat (S n) where
-        natToInt _=1+natToInt (Proxy :: Proxy n)
+    natToInt :: (KnownNat n)=>Proxy n->Int
+    natToInt = fromIntegral . N.natVal
 
     extractNat :: a n->Proxy n
     extractNat _ = Proxy
     -- Peano algebras
 
+    type family NEq (ord::Ordering) :: Bool where
+        NEq EQ = True
+        NEq _ = False
     class PeanoEqual a b t | a b->t
-    instance PeanoEqual Z Z True
-    instance PeanoEqual (S a) Z False
-    instance PeanoEqual Z (S a) False
-    instance (PeanoEqual a b t)=>PeanoEqual (S a) (S b) t
+    instance (N.CmpNat a b ~ x, NEq x ~ y)=>PeanoEqual a b y
+
+    type family NLt (ord::Ordering) :: Bool where
+        NLt LT = True
+        NLt _ = False
     
     class PeanoLT a b t | a b ->t
-    instance PeanoLT Z Z False
-    instance PeanoLT (S x) Z False
-    instance PeanoLT Z (S x) True
-    instance (PeanoLT a b t)=>PeanoLT (S a) (S b) t
+    instance (N.CmpNat a b ~ x, NLt x ~ y)=>PeanoLT a b y
     
-    class PeanoAbsDiff a b c | a b ->c
-    instance PeanoAbsDiff Z Z Z
-    instance PeanoAbsDiff Z (S b) (S b)
-    instance PeanoAbsDiff (S a) Z (S a)
-    instance (PeanoAbsDiff a b c)=>PeanoAbsDiff (S a) (S b) c
-
+    
     class PeanoAdd a b t | a b->t
-    instance PeanoAdd Z b b
-    instance (PeanoAdd a b t)=>(PeanoAdd (S a) b (S t))
+    instance ( ((N.+) a b) ~ t )=>PeanoAdd a b t
 
 
     -- Shorcuts for memory size calculation.
 
     class PeanoUpRound8 a t | a->t
-    instance PeanoUpRound8 Z N0
-    instance PeanoUpRound8 N1 N1
-    instance PeanoUpRound8 N2 N1
-    instance PeanoUpRound8 N3 N1
-    instance PeanoUpRound8 N4 N1
-    instance PeanoUpRound8 N5 N1
-    instance PeanoUpRound8 N6 N1
-    instance PeanoUpRound8 N7 N1
-    instance (PeanoUpRound8 a t)=>PeanoUpRound8 (S(S(S(S(S(S(S(S a)))))))) (S t)
+    instance ((N.Div ((N.+) a 7) 8) ~ t)=>PeanoUpRound8 a t
+    
 
     class PeanoMod8 a t | a->t
-    instance PeanoMod8 Z N0
-    instance PeanoMod8 N1 N1
-    instance PeanoMod8 N2 N2
-    instance PeanoMod8 N3 N3
-    instance PeanoMod8 N4 N4
-    instance PeanoMod8 N5 N5
-    instance PeanoMod8 N6 N6
-    instance PeanoMod8 N7 N7
-    instance (PeanoMod8 a t)=>PeanoMod8 (S(S(S(S(S(S(S(S a)))))))) t
+    instance (N.Mod a 8 ~ t)=>PeanoMod8 a t
 
     class PeanoMod4 a t | a->t
-    instance PeanoMod4 Z N0
-    instance PeanoMod4 N1 N1
-    instance PeanoMod4 N2 N2
-    instance PeanoMod4 N3 N3
-    instance (PeanoMod4 a t)=>PeanoMod4 (S(S(S(S a)))) t
+    instance (N.Mod a 4 ~ t)=>PeanoMod4 a t
 
     class PeanoMod2 a t | a->t
-    instance PeanoMod2 Z N0
-    instance PeanoMod2 N1 N1
-    instance (PeanoMod2 a t)=>PeanoMod2 (S(S a)) t
+    instance (N.Mod a 2 ~ t)=>PeanoMod2 a t
 
     type family NAdd (a::Nat) (b::Nat) :: Nat where
-        NAdd Z b=b
-        NAdd (S a) b=S (NAdd a b)
+        NAdd a b = (N.+) a b
 
     type family NMul (a::Nat) (b::Nat) :: Nat where
-        NMul a Z=Z
-        NMul a (S b)=NAdd (NMul a b) a
+        NMul a b = (N.*) a b
     type family NUpRound8 (a::Nat) :: Nat where
-        NUpRound8 Z=N8
-        NUpRound8 N1=N8
-        NUpRound8 N2=N8
-        NUpRound8 N3=N8
-        NUpRound8 N4=N8
-        NUpRound8 N5=N8
-        NUpRound8 N6=N8
-        NUpRound8 N7=N8
-        NUpRound8 N8=N8
-        NUpRound8 (S(S(S(S(S(S(S(S a)))))))) = S(S(S(S(S(S(S(S(NUpRound8 a))))))))
+        NUpRound8 0=8
+        NUpRound8 a = (N.*) (N.Div ((N.+) a 7) 8) 8
+        
 
     type family NCeil8 (a::Nat) :: Nat where
-        NCeil8 Z=Z
-        NCeil8 N1=N1
-        NCeil8 N2=N1
-        NCeil8 N3=N1
-        NCeil8 N4=N1
-        NCeil8 N5=N1
-        NCeil8 N6=N1
-        NCeil8 N7=N1
-        NCeil8 (S(S(S(S(S(S(S(S a))))))))=S (NCeil8 a)
+        NCeil8 a=(N.Div ((N.+) a 7) 8)
+        
+    type family NMax' (a::Nat) (b::Nat) (r::Ordering) :: Nat where
+        NMax' a b LT=b
+        NMax' a b _ = a
     type family NMax (a::Nat) (b::Nat) :: Nat where
-        NMax Z b = b
-        NMax b Z = b
-        NMax (S a) (S b)=S (NMax a b)
+        NMax a b=NMax' a b (N.CmpNat a b)
 
+
+    type family NDec (a::Nat) :: Nat where
+        NDec 0 = 0
+        NDec a = (N.-) a 1
     class PeanoDec a t | a->t
         
-    instance PeanoDec Z Z
-    instance PeanoDec (S s) s
+    instance (NDec a ~ t)=>PeanoDec a t 
     
     decN :: (PeanoDec a t)=>Proxy a->Proxy t
     decN _ = Proxy
