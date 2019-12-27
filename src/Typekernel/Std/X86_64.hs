@@ -63,9 +63,17 @@ module Typekernel.Std.X86_64 where
     ringToInt Ring2=2
     ringToInt Ring3=3
 
+    getVectorEntry :: USize->C USize
+    getVectorEntry id = do
+        onceC "x86_64_get_vector_entry" $ emitCDecl ["uint64_t x86_64_get_vector_entry(uint64_t id){extern uint64_t __vectors[]; return __vectors[id];}"]
+        f<-externFunction "x86_64_get_vector_entry" (Proxy :: Proxy (UInt64, Void)) (Proxy :: Proxy UInt64)
+        invoke f (id, Void)
+
+    
     vectoredIDTItem :: (MonadC m)=>Int->Bool->Ring->Constructor m IDTItem
     vectoredIDTItem index isintr ring mem = liftC $ do
-        addr<-immUInt64 0
+        index_imm<-immUInt64 $ fromIntegral index
+        addr<-getVectorEntry index_imm
         --emit $ "EFI_LOADED_IMAGE *loaded_image = NULL;"
         --emit $ "uefi_call_wrapper(SystemTable->BootServices->HandleProtocol,3, ImageHandle,&LoadedImageProtocol,(void **)&loaded_image);"
         --emit $ "extern uint64_t vector"++(show index)++";"
@@ -142,6 +150,7 @@ module Typekernel.Std.X86_64 where
         limit<-immUInt16 $ (256*16-1)
         let base=memStart $ newtypeMem table
         base<-cast (Proxy :: Proxy UInt64) base
+        (PhysAddr base)<-virtToPhys (VirtAddr base)
         invoke f (limit, (base, Void))
         return ()
 
@@ -152,6 +161,7 @@ module Typekernel.Std.X86_64 where
         --liftC $ emit "asm volatile(\"cli;\");"
         --liftC $ emit $ "Print(L\"Start init\\n\");"
         zero<-liftC $ immUInt64 0
+        liftC $ cli
         gdt<-tssToGDT zero mgdt
         --liftC $ emit $ "Print(L\"lgdt\\n\");"
         --liftC $ lgdt gdt
@@ -173,6 +183,102 @@ module Typekernel.Std.X86_64 where
         --liftC $ emit $ "Print(L\"lidt done\\n\");"
         --liftC $ emit $ "Print(L\"lidt done\\n\");"
         --liftC $ emit $ "Print(L\"lidt done\\n\");"
+        liftC $ sti
         ctorNewtype (ctorProd (refAddress (Proxy :: Proxy TypekernelGDT) mgdt) (refAddress (Proxy :: Proxy IDTTable)  midt)) mem
 
+    halt :: C ()
+    halt = do
+        onceC "x86_64_halt" $ emitCDecl ["uint64_t x86_64_halt(){asm (\"hlt;\");return 0;}"]
+        hltf<-externFunction "x86_64_halt" (Proxy :: Proxy Void) (Proxy :: Proxy UInt64)
+        invoke hltf Void
+        return ()
+
+    cli :: C ()
+    cli = do
+        onceC "x86_64_cli" $ emitCDecl ["uint64_t x86_64_cli(){asm (\"cli;\");return 0;}"]
+        f<-externFunction "x86_64_cli" (Proxy :: Proxy Void) (Proxy :: Proxy UInt64)
+        invoke f Void
+        return ()
+
+    sti :: C ()
+    sti = do
+        onceC "x86_64_sti" $ emitCDecl ["uint64_t x86_64_sti(){asm (\"sti;\");return 0;}"]
+        f<-externFunction "x86_64_sti" (Proxy :: Proxy Void) (Proxy :: Proxy UInt64)
+        invoke f Void
+        return ()
+
+    break :: C ()
+    break = do
+        onceC "x86_64_break" $ emitCDecl ["uint64_t x86_64_break(){asm (\"int $0x03;\");return 0;}"]
+        f<-externFunction "x86_64_break" (Proxy :: Proxy Void) (Proxy :: Proxy UInt64)
+        invoke f Void
+        return ()
+    newtype VirtAddr = VirtAddr {virtToRaw :: UInt64}
+    newtype PhysAddr = PhysAddr {physToRaw :: UInt64}
+    physicalOffset = 0xFFFF800000000000
+    readCR3 :: C UInt64
+    readCR3 = do
+        onceC "x86_64_read_cr3" $ emitCDecl ["uint64_t x86_64_read_cr3(){uint64_t cr3; __asm__ __volatile__ (\"mov %%cr3, %%rax\\n\\t\"\"mov %%eax, %0\\n\\t\": \"=m\" (cr3): /* no input */: \"%rax\");return cr3;}"]
+        fn<-externFunction "x86_64_read_cr3" (Proxy :: Proxy Void) (Proxy :: Proxy UInt64)
+        addr<-invoke fn Void
+        return addr
     
+    physToVirt :: PhysAddr->C VirtAddr
+    physToVirt x = do
+        off<-immUInt64 physicalOffset
+        val<-binary opAdd off (physToRaw x)
+        return $ VirtAddr val
+
+    physToPtr :: (FirstClass a)=>PhysAddr->C (Ptr a)
+    physToPtr x = do
+        (VirtAddr addr)<-physToVirt x
+        cast (Proxy::Proxy (Ptr a)) addr
+
+    stepDownPageTable :: PhysAddr->UInt64->C PhysAddr
+    stepDownPageTable base offset=do
+        virt<-physToVirt base
+        three<-immUInt8 3
+        offset<-binary opLShift offset three
+        addr<-binary opAdd (virtToRaw virt) offset
+        ptr<-cast (Proxy :: Proxy (Ptr UInt64)) addr
+        ptval<-deref ptr
+        mask<-immUInt64 0x000f_ffff_ffff_f000
+        ptval<-cast (Proxy :: Proxy UInt64) ptval
+        ptval<-binary opAnd ptval mask
+        return $ PhysAddr ptval
+
+    data VAddrSegment = P1 | P2 | P3 | P4 | VOffset
+    virtSegment :: VAddrSegment->VirtAddr->C UInt64
+    virtSegment seg vaddr= do
+        let addr=virtToRaw vaddr
+        let (shamt, mask)=case seg of
+                            P4 -> (39, 0x1ff)
+                            P3 -> (30, 0x1ff)
+                            P2 -> (21, 0x1ff)
+                            P1 -> (12, 0x1ff)
+                            VOffset -> (0, 0xfff)
+        shamt<-immUInt8 shamt
+        mask<-immUInt64 mask
+        addr<-binary opRShift addr shamt
+        binary opAnd addr mask
+                    
+    virtToPhys :: VirtAddr->C PhysAddr
+    virtToPhys x = do
+        cr3<-readCR3
+        mask<-immUInt64 0xffff_ffff_ffff_f000
+        pgtable<-binary opAnd cr3 mask
+        p4<-virtSegment P4 x
+        p3<-virtSegment P3 x
+        p2<-virtSegment P2 x
+        p1<-virtSegment P1 x
+        voffset<-virtSegment VOffset x
+        p<-stepDownPageTable (PhysAddr pgtable) p4
+        p<-stepDownPageTable p p3
+        p<-stepDownPageTable p p2
+        p<-stepDownPageTable p p1
+        --pgsz<-immUInt8 12
+        --pgo<-binary opLShift p1 pgsz
+        --voffset<-binary opAdd pgo voffset
+        --p<-stepDownPageTable p p1
+        p<-binary opAdd (physToRaw p) voffset
+        return $ PhysAddr p

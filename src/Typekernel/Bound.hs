@@ -74,6 +74,8 @@ module Typekernel.Bound where
         liftC $ emitIR $ IRInvoke fnname (typeToName rettype, k) arglist
         --emit $ rettype++" "++k++" = "++fnname++"("++argstr++");"
         return $ wrap bproxy k
+
+    
     --liftB2 :: (MonadTrans t, Monad m, Monad (t m))=>(a->b->m c)->t m a->t m b->t m c
     recursion :: (FirstClass b, FirstClassList a, MonadC m)=>((a->m b)->a->(forall s. RAII s m b))->m (SFn m a b)
     recursion fn = do

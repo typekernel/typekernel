@@ -139,6 +139,8 @@ module Typekernel.Transpiler where
         let argtypes=listctype aproxy
         onceC ("!!extern_function_"++fn) $ emitIRTop $ IRExternFun fn (typeToName rettype) (map typeToName argtypes)
         return $ Fn fn
+
+    
     instance C4mAST C4mIRParser where
         imm :: (Literal a l)=>l->C4mIRParser a
         imm literal=let proxy=literalProxy (Proxy :: Proxy a) in do
@@ -262,7 +264,7 @@ module Typekernel.Transpiler where
         deref p=do
             let pa=ptrType p
             id<-newIdent
-            emitIR $ IRDeref (typeToName $ ctype $ proxyVal $ p, id) (metadata p)
+            emitIR $ IRDeref (typeToName $ ctype $ pa, id) (metadata p)
             --emit $ (ctype pa)++" "++id++" = *"++(metadata p)++";"
             return $ wrap pa id 
         mref :: (FirstClass a)=>Ptr a->a->C4mIRParser ()
