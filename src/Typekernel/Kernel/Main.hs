@@ -202,6 +202,7 @@ module Typekernel.Kernel.Main where
         [logF|Hello, Typekernel!|]
         (gdtp, idtp)<-liftC $ debug_gdt_idt_pages
         ptr<-liftC $ cast (Proxy :: Proxy (Ptr UInt64)) gdtp
+        -- Page Table Self-Checking
         magic<-liftC $ immUInt64 0xfeeddeadbeeebeef
         vaddr<-liftC $ cast (Proxy :: Proxy UInt64) ptr
         phys<-liftC $ virtToPhys (VirtAddr vaddr)
@@ -218,7 +219,7 @@ module Typekernel.Kernel.Main where
                 lift $ [logF|Incorrect!|]
                 liftC $ halt
                 return Void)
-
+        -- Initialize x86 environment
         gdtp<-liftC $ cast (Proxy :: Proxy (Ptr UInt64)) gdtp
         idtp<-liftC $ cast (Proxy :: Proxy (Ptr UInt64)) idtp
         mem_state<-liftC $ defarr (Proxy :: Proxy (SizeOf Stx86_64))
@@ -229,12 +230,13 @@ module Typekernel.Kernel.Main where
         initializeX86_64 memgdt memidt idt_ctor mem_state
         
         [logF|Initialized.|]
-        liftC $ foreverLoop $ lift $ liftC $ Typekernel.Std.X86_64.break -- infiloop
+        liftC $ foreverLoop $ lift $ liftC $ Typekernel.Std.X86_64.break -- infiloop trigger interrupt
         return ()
-
+    -- Trap Handler
     trapHandler :: K ()
     trapHandler = do
         logString "Interrupt!\\n"
         return ()
+    -- Combine two together
     main :: C ()
     main=kernel kernelEntry trapHandler

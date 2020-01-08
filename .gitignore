@@ -2,3 +2,4 @@
 typekernel.cabal
 *~
 target/
+target_tmp/
